@@ -19,7 +19,11 @@ export const env = createEnv({
     NEXTAUTH_SECRET: z.string().optional(),
     NEXTAUTH_URL: z.string().url().optional(),
 
-    // Cognito — optional because credentials-based login works without SSO
+    // Google OAuth — optional because credentials-based login works without SSO
+    GOOGLE_CLIENT_ID: z.string().optional(),
+    GOOGLE_CLIENT_SECRET: z.string().optional(),
+
+    // Legacy Cognito values kept for compatibility while the app is migrated.
     COGNITO_APP_CLIENT_ID: z.string().optional(),
     COGNITO_APP_CLIENT_SECRET: z.string().optional(),
     COGNITO_ISSUER: z.string().url().optional(),
@@ -28,6 +32,11 @@ export const env = createEnv({
     // Bedrock
     BEDROCK_CHAT_MODEL: z.string().optional(),
     BEDROCK_EMBEDDING_MODEL: z.string().optional(),
+
+    // Ollama — local host only. Chat models and any Cloud credentials are stored
+    // per tenant in the LlmProvider table (UI). The sole env read is
+    // OLLAMA_BASE_URL, used by libs/knowledge-base for local embeddings/reranking.
+    OLLAMA_BASE_URL: z.string().optional(),
 
     // App URL (used for reset links, etc.)
     APP_URL: z.string().url().optional(),
