@@ -8,9 +8,11 @@ WORKDIR /app
 RUN apt-get update && apt-get install -y openssl && rm -rf /var/lib/apt/lists/*
 RUN npm install -g bun@1.3.6
 
+# apps/workers/ is deliberately absent: nothing in web-ui imports @chatbot/workers
+# and no workspace depends on it, so listing it here only pulls a package.json that
+# is never installed against.
 COPY package.json bun.lock ./
 COPY apps/web-ui/package.json apps/web-ui/
-COPY apps/workers/package.json apps/workers/
 COPY apps/sdk/package.json apps/sdk/
 COPY libs ./libs/
 COPY infra/package.json infra/
@@ -20,7 +22,6 @@ COPY nx.json ./
 RUN bun install --ignore-scripts
 
 COPY apps/web-ui/ apps/web-ui/
-COPY apps/workers/ apps/workers/
 COPY apps/sdk/ apps/sdk/
 
 ENV NEXT_TELEMETRY_DISABLED=1

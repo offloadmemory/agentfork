@@ -1,0 +1,138 @@
+name: Deploy
+
+# Builds the web-ui image, pushes it to ECR, and rolls the ECS service.
+# Everything the ECS task definition needs (secrets, env, IAM roles, ALB) is
+# created by the Pulumi compute stack — this workflow only ships a new image.
+#
+# Why one file with two jobs instead of a build workflow chained to a deploy
+# workflow: the image tag is produced by the build and consumed by the deploy.
+# A workflow_run chain would have to re-derive that tag, and any mismatch ships
+# the wrong image silently. Two jobs in one run pass it through `needs`.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "apps/web-ui/**"
+      - "apps/sdk/**"
+      - "libs/**"
+      - "prisma/**"
+      - "package.json"
+      - "bun.lock"
+      - ".github/workflows/deploy.yml"
+  workflow_dispatch:
+
+concurrency:
+  group: deploy-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  AWS_REGION: ${{ vars.AWS_REGION || 'ap-south-2' }}
+  ECR_REPOSITORY: ${{ vars.ECR_REPOSITORY || 'chatbot-web-ui' }}
+  ECS_CLUSTER: ${{ vars.ECS_CLUSTER || 'chatbot-ecs-cluster' }}
+  ECS_SERVICE: ${{ vars.ECS_SERVICE || 'chatbot-web-ui-service' }}
+  ECS_TASK_FAMILY: ${{ vars.ECS_TASK_FAMILY || 'chatbot-web-ui-task' }}
+  CONTAINER_NAME: ${{ vars.CONTAINER_NAME || 'WebUIContainer' }}
+  AWS_ROLE_ARN: ${{ vars.AWS_ROLE_ARN || 'arn:aws:iam::704554708141:role/agentfork-github-deploy' }}
+
+jobs:
+  build-and-push:
+    name: Build & push image
+    # Native arm64 runner. The image targets linux/arm64 (Fargate Graviton), and
+    # this repo is public, so arm64 runners are free — building natively avoids
+    # QEMU, which is slow enough on a Next.js build to hit the job timeout.
+    runs-on: ubuntu-24.04-arm
+    permissions:
+      contents: read
+      id-token: write
+
+    outputs:
+      image: ${{ steps.meta.outputs.image }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ env.AWS_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+          role-session-name: gha-deploy-${{ github.run_id }}
+
+      - name: Log in to Amazon ECR
+        id: ecr
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Set up Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Resolve image URI
+        id: meta
+        run: |
+          IMAGE="${{ steps.ecr.outputs.registry }}/${ECR_REPOSITORY}:${GITHUB_SHA}"
+          echo "image=${IMAGE}" >> "$GITHUB_OUTPUT"
+          echo "Building ${IMAGE}"
+
+      - name: Build and push
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: apps/web-ui/Dockerfile
+          platforms: linux/arm64
+          push: true
+          tags: |
+            ${{ steps.meta.outputs.image }}
+            ${{ steps.ecr.outputs.registry }}/${{ env.ECR_REPOSITORY }}:latest
+          cache-from: type=registry,ref=${{ steps.ecr.outputs.registry }}/${{ env.ECR_REPOSITORY }}:buildcache
+          cache-to: type=registry,ref=${{ steps.ecr.outputs.registry }}/${{ env.ECR_REPOSITORY }}:buildcache,mode=max
+          # `next build` needs well over 2 GB; the default runner has enough, but
+          # make the limit explicit so a smaller runner fails loudly, not silently.
+          build-args: |
+            NEXT_PUBLIC_MISSION_CONTROL_URL=${{ vars.NEXT_PUBLIC_MISSION_CONTROL_URL || 'http://localhost:3010/mission-control' }}
+
+  deploy-ecs:
+    name: Deploy to ECS
+    needs: build-and-push
+    runs-on: ubuntu-24.04-arm
+    permissions:
+      contents: read
+      id-token: write
+
+    steps:
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ env.AWS_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+          role-session-name: gha-deploy-${{ github.run_id }}
+
+      - name: Fetch the live task definition
+        run: |
+          aws ecs describe-task-definition \
+            --task-definition "${ECS_TASK_FAMILY}" \
+            --query taskDefinition > task-definition.json
+
+          # Strip the read-only fields ECS returns but RegisterTaskDefinition
+          # rejects. Without this the register call fails with a validation error.
+          jq 'del(
+                .taskDefinitionArn, .revision, .status, .requiresAttributes,
+                .compatibility, .registeredAt, .registeredBy, .deregisteredAt,
+                .enableFaultInjection
+              )' task-definition.json > task-definition.clean.json
+
+      - name: Render the new image into the task definition
+        id: render
+        uses: aws-actions/amazon-ecs-render-task-definition@v1
+        with:
+          task-definition: task-definition.clean.json
+          container-name: ${{ env.CONTAINER_NAME }}
+          image: ${{ needs.build-and-push.outputs.image }}
+
+      - name: Deploy and wait for stability
+        uses: aws-actions/amazon-ecs-deploy-task-definition@v2
+        with:
+          task-definition: ${{ steps.render.outputs.task-definition }}
+          service: ${{ env.ECS_SERVICE }}
+          cluster: ${{ env.ECS_CLUSTER }}
+          wait-for-service-stability: true

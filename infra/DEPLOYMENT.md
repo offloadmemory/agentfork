@@ -43,6 +43,29 @@ No manual `build-images.sh` or `aws ecs update-service` needed.
 
 ---
 
+## GitHub Actions CD
+
+`.github/workflows/deploy.yml` builds the web-ui image, pushes it to ECR, and rolls
+the ECS service. It authenticates via GitHub OIDC (no stored AWS keys). See
+[`docs/dev/deployment.md`](../docs/dev/deployment.md) for the role, variables, and
+rollback procedure.
+
+> **Overlap to be aware of.** The compute stack builds images itself through
+> `awsx.ecr.Image`, so there are currently **two** paths that can produce a web-ui
+> image and move the service:
+>
+> - `pulumi up` (the `deploy-compute` target) — builds from source, bumps the task
+>   definition, and is the authority over the service resource.
+> - `deploy.yml` — builds from the same Dockerfile and updates the service directly.
+>
+> Because Pulumi owns the ECS service resource, a later `pulumi up` will see the
+> CI-rolled task definition as drift and converge it back to its own image. Pick one
+> as the source of truth before relying on this workflow for routine deploys —
+> either let Pulumi keep building, or switch the compute stack to consume a tag that
+> CI has already pushed.
+
+---
+
 ## Prerequisites
 
 | Tool | Version | Install |
