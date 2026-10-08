@@ -20,6 +20,9 @@ jobs:
       NEXTAUTH_SECRET: ci-test-secret-not-for-production
       NEXTAUTH_URL: http://localhost:3005
       AWS_REGION: ap-south-2
+      # EncryptionService refuses to construct without a 64-char hex key, so
+      # libs/claw-studio's claw-runtime tests fail at setup without it. Throwaway.
+      ENCRYPTION_KEY: 0000000000000000000000000000000000000000000000000000000000000000
     # libs/claw-studio persistence tests run against a live Postgres (see
     # TEST_DATABASE_URL in src/agent/persistence.test.ts, which pins port 5433).
     # Without this the suite fails with connection errors rather than assertion

@@ -41,6 +41,9 @@ jobs:
     # Native arm64 runner. The image targets linux/arm64 (Fargate Graviton), and
     # this repo is public, so arm64 runners are free — building natively avoids
     # QEMU, which is slow enough on a Next.js build to hit the job timeout.
+    #
+    # No database is needed: `apps/web-ui/Dockerfile` runs `next build`, which
+    # compiles only, and prisma generate reads the schema rather than connecting.
     runs-on: ubuntu-24.04-arm
     permissions:
       contents: read
@@ -98,6 +101,12 @@ jobs:
     permissions:
       contents: read
       id-token: write
+    # The ECS task pulls its real DATABASE_URL and NEXTAUTH_SECRET from Secrets
+    # Manager at runtime; nothing here is used by the deployed container.
+    #
+    # NEXTAUTH_SECRET is required because `next build` in the image validates
+    # lib/env at build time. The dummy value matches the Dockerfile's own
+    # NEXTAUTH_SECRET build env, so the image is byte-identical to a local build.
 
     steps:
       - name: Configure AWS credentials
