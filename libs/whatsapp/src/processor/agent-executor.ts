@@ -70,6 +70,15 @@ export class WhatsAppAgentExecutor implements AgentExecutor {
     }
 
     // Load MCP + built-in tools
+    // @ts-ignore — dynamic import to avoid circular dependency at build time.
+    // Same reason as the GraphExecutor import below. agent-studio imports this
+    // file's sibling executors (./whatsapp-send-executor and the template one), so
+    // this file is part of agent-studio's compile. When Nx builds agent-studio it
+    // rewrites tsconfig `paths` to each dependency's dist/ output, which maps
+    // @chatbot/agent-studio/server to dist/libs/agent-studio/server — that does not
+    // exist yet, because it is the very project being built. Resolution succeeds at
+    // runtime everywhere else (Next.js and the web-ui Dockerfile both resolve it from
+    // source via tsconfig.base.json), so the build-time error is a false positive.
     const { buildMcpToolsForAgent } = await import('@chatbot/agent-studio/server');
     const { tools: mcpTools, cleanup: mcpCleanup } = await buildMcpToolsForAgent(agent.id, tenantId, this.prisma);
     try {
