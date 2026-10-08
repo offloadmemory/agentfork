@@ -90,9 +90,9 @@ export default function LoginPage() {
                       variant="outline"
                       type="button"
                       className="w-full"
-                      onClick={() => signIn('cognito', { callbackUrl: '/dashboard' })}
+                      onClick={() => signIn('google', { callbackUrl: '/dashboard' })}
                     >
-                      Sign in with SSO
+                      Sign in with Google
                     </Button>
                   </Field>
                   <FieldSeparator className="*:data-[slot=field-separator-content]:bg-card">

@@ -1,6 +1,6 @@
 import './auth-types';
 import { NextAuthOptions } from 'next-auth';
-import CognitoProvider from 'next-auth/providers/cognito';
+import GoogleProvider from 'next-auth/providers/google';
 import CredentialsProvider from 'next-auth/providers/credentials';
 import { PrismaAdapter } from '@auth/prisma-adapter';
 import { getPrismaClient } from '../db/prisma-client';
@@ -81,11 +81,11 @@ export function createAuthOptions(overrides?: Partial<NextAuthOptions>): NextAut
               status: 'error',
               severity: newFailedAttempts >= 5 ? 'critical' : 'high',
               details: `Failed login attempt ${newFailedAttempts} for ${email}` +
-                       (lockedUntil ? ` — account locked for 15 minutes` : ''),
+                (lockedUntil ? ` — account locked for 15 minutes` : ''),
               source: 'platform',
               resource: email,
               metadata: { email, failedAttempts: newFailedAttempts, locked: !!lockedUntil },
-            }).catch(() => {});
+            }).catch(() => { });
 
             return null;
           }
@@ -108,7 +108,7 @@ export function createAuthOptions(overrides?: Partial<NextAuthOptions>): NextAut
             source: 'platform',
             resource: user.email ?? user.id,
             metadata: { provider: 'credentials', userId: user.id },
-          }).catch(() => {});
+          }).catch(() => { });
 
           return {
             id: user.id,
@@ -119,16 +119,14 @@ export function createAuthOptions(overrides?: Partial<NextAuthOptions>): NextAut
           };
         },
       }),
-      ...(env.COGNITO_APP_CLIENT_ID
+      ...(env.GOOGLE_CLIENT_ID
         ? [
-            CognitoProvider({
-              clientId: env.COGNITO_APP_CLIENT_ID,
-              clientSecret: env.COGNITO_APP_CLIENT_SECRET!,
-              issuer: env.COGNITO_ISSUER!,
-              allowDangerousEmailAccountLinking: true,
-              httpOptions: { timeout: 10000 },
-            }),
-          ]
+          GoogleProvider({
+            clientId: env.GOOGLE_CLIENT_ID,
+            clientSecret: env.GOOGLE_CLIENT_SECRET!,
+            allowDangerousEmailAccountLinking: true,
+          }),
+        ]
         : []),
     ],
     pages: { signIn: '/login', error: '/login' },
@@ -222,7 +220,7 @@ export function createAuthOptions(overrides?: Partial<NextAuthOptions>): NextAut
           source: 'platform',
           resource: user.email ?? user.id,
           metadata: { provider: account?.provider ?? 'credentials', userId: user.id },
-        }).catch(() => {});
+        }).catch(() => { });
       },
       async signOut({ token }) {
         const userId = token?.sub as string | undefined;
@@ -240,7 +238,7 @@ export function createAuthOptions(overrides?: Partial<NextAuthOptions>): NextAut
           source: 'platform',
           resource: email ?? userId ?? 'unknown',
           metadata: { userId },
-        }).catch(() => {});
+        }).catch(() => { });
       },
     },
     ...overrides,
