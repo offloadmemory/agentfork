@@ -10,7 +10,12 @@ name: Build & push web-ui image
 
 on:
   push:
-    branches: [main]
+    # ci/github-actions-cd is included temporarily so this workflow can be
+    # exercised before it lands on the default branch. GitHub only exposes
+    # workflow_dispatch for workflows already on the default branch, so a push
+    # trigger on the working branch is the only way to test it end to end.
+    # Drop this entry once merged.
+    branches: [main, ci/github-actions-cd]
     paths:
       - "apps/web-ui/**"
       - "apps/sdk/**"
