@@ -64,19 +64,14 @@ jobs:
       - name: Unit tests
         run: bun run test
 
-      - name: Build web-ui
-        # Scoped to the Web UI on purpose, and --excludeTaskDependencies is load-bearing.
-        #
-        # web-ui declares agent-studio as a graph dependency, so plain `nx build web-ui`
-        # first runs agent-studio:build, which currently fails with TS2307 on the
-        # agent-studio <-> whatsapp import cycle (pre-existing; reproduces on a pristine
-        # origin/main worktree). That failure blocks web-ui even though web-ui itself is fine.
-        #
-        # Skipping the graph is correct rather than a workaround: web-ui resolves every
-        # library from source through tsconfig.base.json paths (and transpilePackages), so it
-        # never consumes agent-studio's dist/ output. apps/web-ui/Dockerfile builds the exact
-        # same way in production — `next build` with no upstream tsc step.
-        run: bunx nx build web-ui --excludeTaskDependencies
+      # Restores the original `bun run build` (nx run-many -t build --all). This used
+      # to need --excludeTaskDependencies scoped to web-ui, because agent-studio's
+      # build failed on an Nx path-rewriting bug and web-ui depends on it. Both
+      # agent-studio and claw-studio are fixed now (see
+      # libs/whatsapp/src/processor/agent-executor.ts and
+      # libs/claw-studio/src/mcp/mcp-tools.ts), so the whole monorepo builds.
+      - name: Build
+        run: bun run build
 
       - name: Install Playwright browsers
         run: bunx playwright install --with-deps chromium
@@ -90,11 +85,10 @@ jobs:
       # exercised. Wiring it up is its own piece of work — most likely a dedicated
       # CI serve command (web-ui only) or a pre-started server, not dev:all.
       #
-      # The target also defaults to dependsOn: ^build, so it trips over the same
-      # agent-studio:build failure as the all-projects build below.
+      # The target also defaults to dependsOn: ^build, which is now satisfiable.
       #
       # - name: E2E tests
-      #   run: bunx nx e2e web-ui-e2e --excludeTaskDependencies -- --grep-invert @sso
+      #   run: bunx nx e2e web-ui-e2e -- --grep-invert @sso
 
       - name: Upload Playwright report
         if: failure()
@@ -104,19 +98,7 @@ jobs:
           path: apps/web-ui-e2e/playwright-report/
           retention-days: 7
 
-      # Scoped out of this change, tracked as a separate problem:
-      #
-      #   nx run-many -t build --all   (the old `bun run build`)
-      #
-      # fails at agent-studio:build with:
-      #   libs/whatsapp/src/processor/agent-executor.ts:73:52
-      #   error TS2307: Cannot find module '@chatbot/agent-studio/server'
-      #
-      # libs/agent-studio imports @chatbot/whatsapp and whatsapp imports back into
-      # agent-studio, and tsconfig.base.json maps @chatbot/agent-studio/client and
-      # /server but no subpath that resolves from inside the cycle. Restoring the
-      # all-projects build means fixing that cycle, not re-enabling `bun run build`.
-      #
+      # TODO: Add lint and typecheck scripts when ESLint / tsc targets are configured in Nx
       # - name: Lint
       #   run: bun run lint
       # - name: Type check
