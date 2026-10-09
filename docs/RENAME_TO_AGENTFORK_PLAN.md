@@ -75,8 +75,8 @@ connection string. **Do not touch live cloud state from code.**
 **C. Canonical repo URL** — for README clone cmds, badges, issue links.
    - `github.com/kartikmanimuthu/agentfork` (rename slug on GitHub; I update all URLs), or
    - keep `…/chatbot` (rebrand display name only, repo slug unchanged for now).
-   - Note dual-remote setup: GitHub + Bitbucket (see `docs/dev/git-workflow.md`). A repo rename
-     must be coordinated across both remotes.
+   - GitHub is the only remote (see `docs/dev/git-workflow.md`); a repo rename only needs to be
+     updated in the GitHub remote URL.
 
 ---
 
@@ -123,7 +123,7 @@ connection string. **Do not touch live cloud state from code.**
 6. **Repo URLs** (per §2.C) — update clone/badge/issue links.
 7. **Verify:** `bun run build`, `bun run test`, `bun run e2e:smoke`; grep for residual `chatbot`
    in scope; manually load app + docs to confirm UI/title branding.
-8. **PR** into `main` (`gh pr create --base main`); coordinate GitHub + Bitbucket remotes.
+8. **PR** into `main` (`gh pr create --base main`).
 
 ## 5. Verification checklist (definition of done)
 - [ ] `grep -ri "chatbot"` returns only intentional/historical hits (documented exceptions)
