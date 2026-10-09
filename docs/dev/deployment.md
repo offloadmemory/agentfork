@@ -24,7 +24,21 @@ role via GitHub's OIDC provider.
 | --- | --- |
 | OIDC provider | `arn:aws:iam::704554708141:oidc-provider/token.actions.githubusercontent.com` |
 | Role | `arn:aws:iam::704554708141:role/agentfork-github-deploy` |
-| Trust condition | `repo:offloadmemory/agentfork:*` |
+| Trust condition | `repo:offloadmemory@20665413/agentfork@1227066446:*` (see note) |
+
+> **The trust condition must include immutable IDs.** `offloadmemory` is a GitHub
+> **Organization**, so GitHub's OIDC `sub` claim is
+> `repo:offloadmemory@20665413/agentfork@1227066446:...` — it carries numeric IDs,
+> not the bare `owner/repo` form. A policy written as `repo:offloadmemory/agentfork:*`
+> will never match and every `sts:AssumeRoleWithWebIdentity` call is denied, which
+> surfaces as `Could not assume role with OIDC: Not authorized`. Both forms are
+> allowed so the role keeps working if the repository is ever transferred to a user
+> account, where the ID form is not used.
+>
+> Diagnosing this from the GitHub log alone is misleading — the run only shows the
+> generic denial, so check the *account* type before assuming the policy is wrong.
+> CloudTrail does not record these STS calls (it covers management events only), so
+> it offers no help here.
 | Policy | `agentfork-github-deploy-policy` (inline) |
 
 The trust policy is scoped to this repository only — another repo in the same org
