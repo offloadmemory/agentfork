@@ -1,72 +1,66 @@
-# Git Workflow — Committing & Pushing (GitHub + Bitbucket)
+# Git Workflow — Fork and Upstream
 
-This repo lives in **two remotes** that must stay in sync. `origin` is configured to **push to both** at once, so a single `git push` lands on GitHub *and* Bitbucket.
+This project uses a **fork-based workflow**:
 
-> Audience: humans and AI agents. Follow the steps verbatim. Do not push, force-push, or rewrite history unless the user explicitly asks.
+- `origin` is **your fork** of the repository. It is the default push target.
+- `upstream` is the **official repository**. It is read-only for contributors: pushes to it are disabled.
+
+> Audience: humans and AI agents. Follow the steps in order. Do not push, force-push, or rewrite history unless the user explicitly asks.
 
 ## Remote layout
 
-| Remote | Fetch | Push | Use for |
+| Remote | Points to | Fetch | Push |
 | --- | --- | --- | --- |
-| `origin` | GitHub | **GitHub + Bitbucket** | Default. A bare `git push` fans out to both. |
-| `github` | GitHub | GitHub only | Push to GitHub alone. |
-| `bitbucket` | Bitbucket | Bitbucket only | Push to / fetch from Bitbucket alone. |
+| `origin` | `https://github.com/<your-user>/agentfork.git` (your fork) | yes | yes |
+| `upstream` | `https://github.com/offloadmemory/agentfork.git` (official) | yes | **disabled** (`no_push`) |
 
-GitHub: `https://github.com/kartikmanimuthu/chatbot.git`Bitbucket: `git@bitbucket.org:acme/chatflow.git`
-
-Verify with `git remote -v`. `origin` must list **two** push lines (GitHub then Bitbucket). If it doesn't, re-create the fan-out:
+Set up the remotes once, after forking and cloning:
 
 ```bash
-git remote set-url --add --push origin https://github.com/kartikmanimuthu/chatbot.git
-git remote set-url --add --push origin git@bitbucket.org:acme/chatflow.git
+git remote add upstream https://github.com/offloadmemory/agentfork.git
+git remote set-url --push upstream no_push
+git remote -v    # upstream must show "no_push" on the push line
 ```
 
-## Standard commit + push
+## Standard contribution flow
+
+1. Update your view of the official repository:
+   ```bash
+   git fetch upstream
+   ```
+2. Create a branch from the official `main` (not from your fork's `main`):
+   ```bash
+   git checkout -b docs/<topic> upstream/main
+   ```
+3. Make your changes, then commit them (see commit message rules below).
+4. Push the branch to your fork:
+   ```bash
+   git push -u origin docs/<topic>
+   ```
+5. Open a pull request on GitHub:
+   - base repository: `offloadmemory/agentfork`, base branch: `main`
+   - head repository: your fork, compare branch: `docs/<topic>`
+
+## Keeping your fork's `main` up to date
+
+Your fork's `main` should match the official `main`, so that it always has the latest changes.
 
 ```bash
-git status                       # confirm what you're committing
-git add -A                       # or stage specific paths
-git commit -m "type(scope): summary"   # see commit message rules below
-git push                         # → fans out to BOTH GitHub and Bitbucket
+git fetch upstream
+git checkout main
+git merge --ff-only upstream/main
+git push origin main
 ```
 
-That's it. Commits are local until pushed; the single `git push` mirrors them to both repos.
+If `--ff-only` fails, your `main` has commits the official repository does not have. Stop and ask the project owner before doing anything else. Do not force-push.
 
-### Single-target push (only when asked)
-
-```bash
-git push github   <branch>       # GitHub only
-git push bitbucket <branch>      # Bitbucket only
-```
-
-## Before you push — checklist
+## Before you push: checklist
 
 1. **Verify the work.** Run `bun run typecheck` and `bun run test` (or `bun run verify`). Never claim success without seeing the commands pass.
-2. **No secrets.** Never commit real credentials. `.env.example` holds *placeholders only*. GitHub push protection will block real keys (e.g. `AWS_BEARER_TOKEN_BEDROCK`, `AKIA…`). If blocked, **stop and tell the user** — do not use the allow-secret bypass URL on your own.
-3. **Branch, don't push to** `main` **directly.** Work on a feature branch and open a PR into `main`(`gh pr create --base main`). Only the user merges.
+2. **No secrets.** Never commit real credentials. `.env.example` holds placeholders only. If GitHub push protection blocks a commit, stop and tell the user. Do not use any bypass link on your own.
+3. **Branch, don't push to `main` directly.** Work on a feature branch and open a PR into the official `main`.
 
 ## Commit message rules
 
 - Conventional Commits: `feat(...)`, `fix(...)`, `docs(...)`, `test(...)`, `build(...)`, etc.
-- Imperative, one-line summary; body only if it adds context.
-- AI agents append the configured `Co-Authored-By` trailer.
-
-## Keeping the two remotes in sync (important)
-
-The fan-out push only covers changes that flow **through this machine**. Two gotchas:
-
-1. **Fetch is GitHub-only.** If someone pushes *directly* to Bitbucket, you won't get it from `git pull`. Pull it in manually:
-
-   ```bash
-   git fetch bitbucket
-   git merge bitbucket/main        # ff-only when histories share a base
-   ```
-
-2. **Both push legs must each fast-forward.** `git push` sends to GitHub first, then Bitbucket. If one side rejects (non-fast-forward), that half fails while the other may have already succeeded → the repos drift. On rejection: `git fetch` the rejecting remote, merge, push again.
-
-When in doubt about divergence, check:
-
-```bash
-git fetch github && git fetch bitbucket
-git rev-list --left-right --count github/main...bitbucket/main   # 0 0 = in sync
-```
+- Imperative, one-line summary. Add a body only if it adds context.
