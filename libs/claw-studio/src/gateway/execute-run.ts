@@ -45,7 +45,7 @@ const logger = createLogger('claw-studio:gateway:execute');
 export interface ExecuteRunInput {
   runId: string;
   /** Present when this is a HIL resume rather than a first execution. */
-  resume?: { action: Exclude<ReplyAction, 'reject'>; content?: string };
+  resume?: { action: Exclude<ReplyAction, 'reject'>; content?: string; approvedBy?: string };
   deps: RouterDeps;
   /**
    * Per-run runtime shaping. Optional and defaulted, so channel runs are unchanged;
@@ -432,9 +432,12 @@ export async function executeRun(input: ExecuteRunInput): Promise<void> {
       graphInput = new Command({
         resume: { decisions: Array.from({ length: decisionCount }, () => ({ type: 'approve' as const })) },
       });
+      const approvedSuffix = resume.approvedBy ? ` by ${resume.approvedBy}` : '';
       await runs.appendEvent(run, {
         eventType: 'approval_decision',
-        content: resume.action === 'approve_always' ? 'approved (always, for this task)' : 'approved',
+        content:
+          (resume.action === 'approve_always' ? 'approved (always, for this task)' : 'approved') +
+          approvedSuffix,
       });
     } else {
       graphInput = { messages: [new HumanMessage(resume.content ?? '')] };
@@ -570,6 +573,8 @@ export async function terminateRun(input: {
   runId: string;
   deps: RouterDeps;
   kind: 'reject' | 'cancel';
+  /** Platform user id that rejected, when `kind` is `'reject'` and it came from a channel. */
+  approvedBy?: string;
 }): Promise<void> {
   const runs = getRunService();
   const bus = getRunEventBus();
@@ -595,7 +600,11 @@ export async function terminateRun(input: {
   const unsubscribe = adapter ? attachToRun(run, adapter, input.deps) : () => {};
   try {
     if (rejected) {
-      await runs.appendEvent(run, { eventType: 'approval_decision', content: 'rejected' });
+      const approvedSuffix = input.approvedBy ? ` by ${input.approvedBy}` : '';
+      await runs.appendEvent(run, {
+        eventType: 'approval_decision',
+        content: `rejected${approvedSuffix}`,
+      });
     } else {
       await runs.appendEvent(run, { eventType: 'status', content: 'cancelled' });
     }

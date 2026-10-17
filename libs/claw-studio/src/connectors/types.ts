@@ -32,6 +32,18 @@ export interface HilCapabilities {
 
 export interface BaseConnectorConfig {
   enabled: boolean;
+  /**
+   * Platform user ids allowed to act on this channel's approval affordances
+   * (Approve / Reject / "Always allow for this task"). Not a secret — these
+   * are public platform identifiers, not credentials.
+   *
+   * Unset or empty means no allowlist is configured yet. See the gateway's
+   * `handleResume` for the resulting default-deny behavior on
+   * `approve_always`, which grants a standing permission and is too
+   * consequential to leave open to any workspace member by default
+   * (docs/superpowers/claw-studio-known-issues.md #11).
+   */
+  approverIds?: string[];
 }
 
 export interface SlackConnectorConfig extends BaseConnectorConfig {
