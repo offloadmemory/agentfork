@@ -1956,3 +1956,62 @@ model TranscriptionAwsCredential {
 
   @@map("transcription_aws_credentials")
 }
+
+// ─── LangGraph checkpoint tables ───────────────────────────────────────────
+// These 4 models are NOT created by Prisma. They mirror the exact DDL that
+// `@langchain/langgraph-checkpoint-postgres`'s `PostgresSaver.setup()` already
+// runs at runtime against the "public" schema (libs/claw-studio/src/agent/persistence.ts
+// calls `PostgresSaver.fromConnString(databaseUrl)` with no schema override, and
+// that package defaults to "public" — see node_modules/@langchain/langgraph-checkpoint-postgres/dist/index.js).
+// Modeling them here is purely to stop `prisma migrate dev` from reporting them
+// as drift and offering to drop them; the migration that introduces them must
+// use `CREATE TABLE IF NOT EXISTS` (see prisma/migrations), matching what
+// `.setup()` itself does, so neither side fights the other over who owns creation.
+// pgvector's HNSW indexes on ClawMemory/DocumentChunk remain unmodeled — Prisma's
+// schema language has no way to express an index, only a column type via
+// Unsupported(), so that half of the known drift is permanent (see
+// docs/superpowers/claw-studio-known-issues.md #5 and libs/claw-studio/CLAUDE.md).
+model CheckpointMigration {
+  v Int @id
+
+  @@map("checkpoint_migrations")
+}
+
+model Checkpoint {
+  threadId           String  @map("thread_id")
+  checkpointNs       String  @default("") @map("checkpoint_ns")
+  checkpointId       String  @map("checkpoint_id")
+  parentCheckpointId String? @map("parent_checkpoint_id")
+  type               String?
+  checkpoint         Json
+  metadata           Json    @default("{}")
+
+  @@id([threadId, checkpointNs, checkpointId])
+  @@map("checkpoints")
+}
+
+model CheckpointBlob {
+  threadId     String @map("thread_id")
+  checkpointNs String @default("") @map("checkpoint_ns")
+  channel      String
+  version      String
+  type         String
+  blob         Bytes?
+
+  @@id([threadId, checkpointNs, channel, version])
+  @@map("checkpoint_blobs")
+}
+
+model CheckpointWrite {
+  threadId     String  @map("thread_id")
+  checkpointNs String  @default("") @map("checkpoint_ns")
+  checkpointId String  @map("checkpoint_id")
+  taskId       String  @map("task_id")
+  idx          Int
+  channel      String
+  type         String?
+  blob         Bytes
+
+  @@id([threadId, checkpointNs, checkpointId, taskId, idx])
+  @@map("checkpoint_writes")
+}
