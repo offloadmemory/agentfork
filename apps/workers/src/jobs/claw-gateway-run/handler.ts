@@ -18,7 +18,7 @@ import { clawGatewayRunSchema } from './schema.js';
 const log = createLogger('claw-gateway-run');
 
 export async function handleClawGatewayRun(data: unknown): Promise<void> {
-  const { runId, tenantId, action, content } = clawGatewayRunSchema.parse(data);
+  const { runId, tenantId, action, content, approvedBy } = clawGatewayRunSchema.parse(data);
 
   try {
     const { executeRun, terminateRun, grantPendingToolsForRun } = await import('@chatbot/claw-studio');
@@ -35,7 +35,12 @@ export async function handleClawGatewayRun(data: unknown): Promise<void> {
 
     if (action === 'reject' || action === 'cancel') {
       log.info({ runId, tenantId, action }, 'Terminating run');
-      await terminateRun({ runId, deps, kind: action === 'reject' ? 'reject' : 'cancel' });
+      await terminateRun({
+        runId,
+        deps,
+        kind: action === 'reject' ? 'reject' : 'cancel',
+        approvedBy: action === 'reject' ? approvedBy : undefined,
+      });
       return;
     }
 
@@ -43,7 +48,7 @@ export async function handleClawGatewayRun(data: unknown): Promise<void> {
     await executeRun({
       runId,
       deps,
-      resume: action ? { action, content } : undefined,
+      resume: action ? { action, content, approvedBy } : undefined,
     });
     log.info({ runId, tenantId }, 'Gateway run handler finished');
   } catch (error) {

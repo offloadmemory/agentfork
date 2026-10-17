@@ -18,6 +18,8 @@ export const clawGatewayRunSchema = z.object({
   ]).optional(),
   /** The user's reply text, for clarification_response. */
   content: z.string().optional(),
+  /** The platform user id that made this decision, when it came from a channel. */
+  approvedBy: z.string().optional(),
 });
 
 export type ClawGatewayRunData = z.infer<typeof clawGatewayRunSchema>;
