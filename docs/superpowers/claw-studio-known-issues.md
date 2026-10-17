@@ -419,6 +419,27 @@ misconfigured row has `embeddingDimensions: null`, so `&&` short-circuited and t
   at least surface a clear `ClawEmbeddingsConfigError` instead of a raw Postgres 22000 until it's
   corrected.
 
+  Exact remediation, once DB access is available — find the affected row(s) first (any provider whose
+  stored dimension doesn't match the column, or whose model is a known mismatch like Titan G1):
+
+  ```sql
+  SELECT id, "tenantId", "embeddingModel", "embeddingDimensions" FROM llm_providers
+  WHERE "embeddingModel" IS NOT NULL
+    AND ("embeddingDimensions" IS NULL OR "embeddingDimensions" != 1024);
+  ```
+
+  Then, per affected row (nothing was ever successfully written at the wrong dimension, so no
+  re-embedding is required — this is a config correction, not a data migration):
+
+  ```sql
+  UPDATE llm_providers
+  SET "embeddingModel" = 'amazon.titan-embed-text-v2:0', "embeddingDimensions" = 1024
+  WHERE id = '<affected row id>';
+  ```
+
+  This is deployment-specific data, not something a PR against this repo can fix — recorded here so
+  whoever has DB access can apply it directly from the issue, without re-deriving the root cause.
+
 ---
 
 ## ✅ 16. FIXED (2026-08-03) — memory extraction intermittently fails on malformed LLM JSON
