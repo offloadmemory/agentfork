@@ -9,6 +9,8 @@ import {
   PausedExecutionService,
   LlmProviderService,
   TenantConfigService,
+  NodeTraceCollector,
+  sanitizeExecutionEvent,
 } from '@chatbot/shared';
 import { createLLMProvider, type TenantLLMConfig } from '@chatbot/ai';
 import { GraphExecutor, createNodeExecutors } from '@chatbot/agent-studio/server';
@@ -125,6 +127,8 @@ export async function POST(
 
     let fullText = '';
     let pausedAgain = false;
+    // Continue the per-node trace persisted before the pause (already redacted).
+    const traceCollector = NodeTraceCollector.fromOutput(agentExecution.output);
 
     const stream = new ReadableStream({
       async start(controller) {
@@ -140,13 +144,15 @@ export async function POST(
             metadata,
             {
               onEvent: (event) => {
-                sendEvent(event.type, event);
+                traceCollector.handleEvent(event);
+                sendEvent(event.type, sanitizeExecutionEvent(event));
                 if (event.type === 'text_delta') {
                   fullText += (event as any).delta;
                 }
               },
               onPause: async (pauseInfo) => {
                 pausedAgain = true;
+                traceCollector.recordPause();
                 await pausedExecService.create({
                   tenantId,
                   agentId,
@@ -159,7 +165,7 @@ export async function POST(
                 });
                 await db.agentExecution.update({
                   where: { id: paused.executionId },
-                  data: { status: 'paused' },
+                  data: { status: 'paused', output: { ...traceCollector.snapshot() } },
                 });
                 logger.info({ executionId: paused.executionId, resumeToken: pauseInfo.resumeToken }, 'Playground resumed execution paused again');
               },
@@ -171,7 +177,7 @@ export async function POST(
               where: { id: paused.executionId },
               data: {
                 status: 'completed',
-                output: { text: fullText },
+                output: { text: fullText, ...traceCollector.snapshot() },
                 completedAt: new Date(),
               },
             });
@@ -181,7 +187,7 @@ export async function POST(
           sendEvent('execution_error', { error: errorMessage });
           await db.agentExecution.update({
             where: { id: paused.executionId },
-            data: { status: 'failed', output: { error: errorMessage }, completedAt: new Date() },
+            data: { status: 'failed', output: { error: errorMessage, ...traceCollector.snapshot() }, completedAt: new Date() },
           });
           logger.error({ executionId: paused.executionId, error: errorMessage }, 'Graph resume execution failed');
         } finally {
