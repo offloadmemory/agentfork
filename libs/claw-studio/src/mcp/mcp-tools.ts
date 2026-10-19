@@ -1,7 +1,23 @@
 import { tool, type StructuredTool } from '@langchain/core/tools';
 import { z } from 'zod';
+// Deep subpaths are deliberate: the barrel would pull agent-studio's WhatsApp and
+// Telegram node executors (and their transitive deps) into claw-studio's test graph
+// — see the alias rationale in vitest.config.ts.
+//
+// @ts-ignore on each — same false positive as
+// libs/whatsapp/src/processor/agent-executor.ts. When Nx builds this project it
+// rewrites tsconfig `paths` to each dependency's dist/ output, turning these into
+// dist/libs/agent-studio/<subpath>, which cannot resolve because agent-studio's
+// compiled tree nests under dist/libs/agent-studio/libs/agent-studio/src/. The
+// imports resolve correctly everywhere they actually run: `tsc -p
+// tsconfig.lib.json` passes clean (which is what apps/workers/Dockerfile uses),
+// and Next.js resolves them from source. The nx build target is the only context
+// where they fail, and nothing consumes its output.
+// @ts-ignore
 import { McpServerService } from '@chatbot/agent-studio/services/mcp-server-service';
+// @ts-ignore
 import { McpClientService } from '@chatbot/agent-studio/services/mcp-client.service';
+// @ts-ignore
 import type { McpServer, McpServerConfig } from '@chatbot/agent-studio/types/mcp-server';
 import { getPrismaClient, createLogger } from '@chatbot/shared';
 
@@ -148,7 +164,9 @@ export async function createMcpTools(tenantId: string): Promise<McpToolsResult> 
         toolCount: discovered.length,
         // The namespaced form, matching what is actually bound — a bare
         // `get_holdings_data` in the prompt is a name the model cannot call.
-        toolNames: discovered.map((t) => `mcp_${slug}_${t.name}`.slice(0, 64)),
+        // `t` is annotated because the @ts-ignore above leaves `discovered` as any,
+        // which otherwise makes this parameter implicitly any. Mirrors McpDiscoveredTool.
+        toolNames: discovered.map((t: { name: string }) => `mcp_${slug}_${t.name}`.slice(0, 64)),
       });
       logger.info({ tenantId, server: server.name, toolCount: discovered.length }, '[mcp] connected and discovered tools');
     } catch (error: any) {

@@ -186,11 +186,22 @@ modules/<module>/        # specs grouped by product module (auth, sso, marketing
 
 ## Git Workflow
 
-This repo uses a **fork workflow**: `origin` is your fork (the push target) and `upstream` is the official repository (read-only, push disabled). See **`docs/dev/git-workflow.md`** for the full procedure. Key rules:
-- Create branches from `upstream/main`, push them to `origin`, and open a PR into `upstream` `main`.
-- Never push to `upstream`. Its push URL is `no_push`.
-- Keep your fork's `main` in sync with `upstream/main` using fast-forward only.
-- Fetch both remotes: `git fetch upstream && git fetch origin`.
+Two roles, one repository. Use the part that matches how you have this cloned. See **`docs/dev/git-workflow.md`** for the full procedure.
+
+**Maintainer / core clone**
+
+- `origin` is `github.com:offloadmemory/agentfork.git`; a plain `git push` targets it.
+- Branch → PR into `main` (`gh pr create --base main`). Never push to `main` directly; only the owner merges.
+
+**External contributor (fork)**
+
+- `origin` is your fork; `upstream` is `offloadmemory/agentfork` with pushes disabled (`git remote set-url --push upstream no_push`).
+- Branch from `upstream/main`, push to `origin`, open the PR against `upstream` `main`.
+- Sync your fork with `git fetch upstream && git merge --ff-only upstream/main && git push origin main`.
+
+**Both**
+
+- `.env.example` holds placeholders only — never commit real secrets. If GitHub push protection blocks a key, stop and tell the user; don't use the allow-secret bypass yourself.
 
 ## Code Style
 

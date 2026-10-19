@@ -14,6 +14,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `@chatbot/*` package namespace and infrastructure/database identifiers are unchanged.
 
 ### Added
+- Graph-agent playground executions now persist a per-node trace in
+  `AgentExecution.output.trace` (no schema change) and show graph nodes in the console
+  trace tab. Persisted and streamed trace data is redacted with irreversible placeholders
+  (`[CPF]`, `[CNPJ]`, `[CARTAO]`, `[EMAIL]`, `[TELEFONE]`, `[IP]`, `[TOKEN]`) and size-capped.
+  Only structured identifiers are detected; names, addresses and free text are not.
 - `SUPPORT.md` describing where to get help
 - `.github/CODEOWNERS` for automatic review routing
 - README badges (build status, license)

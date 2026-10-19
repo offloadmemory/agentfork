@@ -21,9 +21,35 @@ interface TraceItem {
   output?: unknown;
 }
 
+/** Subset of a graph `NodeTraceEntry` as streamed (already redacted by the server). */
+interface NodeTracePayload {
+  nodeId?: string;
+  nodeType?: string;
+  nodeLabel?: string;
+  status?: string;
+  durationMs?: number;
+  input?: unknown;
+  output?: unknown;
+  error?: string;
+}
+
+function applyNodeTrace(item: TraceItem, trace: NodeTracePayload): void {
+  item.name = trace.nodeLabel ?? item.name;
+  item.type = trace.nodeType ?? item.type;
+  item.status = trace.status === 'failed' ? 'failed' : 'completed';
+  item.durationMs = trace.durationMs;
+  item.input = trace.input;
+  item.output =
+    trace.error !== undefined
+      ? { ...((trace.output as Record<string, unknown> | undefined) ?? {}), error: trace.error }
+      : trace.output;
+}
+
 function buildTraceItems(events: ConsoleEvent[]): TraceItem[] {
   const items: TraceItem[] = [];
   const toolCalls = new Map<string, TraceItem>();
+  // Latest running item per graph node id (a node may run more than once in loops).
+  const runningNodes = new Map<string, TraceItem>();
 
   for (const event of events) {
     if (event.type === 'tool_call') {
@@ -66,6 +92,36 @@ function buildTraceItems(events: ConsoleEvent[]): TraceItem[] {
         execItem.status = event.data.error ? 'failed' : 'completed';
         execItem.durationMs = event.data.durationMs as number;
       }
+    } else if (event.type === 'node_start') {
+      const nodeId = String(event.data.nodeId ?? 'node');
+      const item: TraceItem = {
+        id: event.id,
+        type: String(event.data.nodeType ?? 'node'),
+        name: nodeId,
+        status: 'running',
+      };
+      runningNodes.set(nodeId, item);
+      items.push(item);
+    } else if (event.type === 'node_complete') {
+      const trace = (event.data.trace ?? {}) as NodeTracePayload;
+      const nodeId = String(event.data.nodeId ?? trace.nodeId ?? 'node');
+      let item = runningNodes.get(nodeId);
+      if (!item) {
+        item = { id: event.id, type: trace.nodeType ?? 'node', name: nodeId, status: 'running' };
+        items.push(item);
+      }
+      applyNodeTrace(item, trace);
+      runningNodes.delete(nodeId);
+    } else if (event.type === 'node_error') {
+      const nodeId = String(event.data.nodeId ?? 'node');
+      let item = runningNodes.get(nodeId);
+      if (!item) {
+        item = { id: event.id, type: 'node', name: nodeId, status: 'running' };
+        items.push(item);
+      }
+      item.status = 'failed';
+      item.output = { error: String(event.data.error ?? 'Node failed') };
+      runningNodes.delete(nodeId);
     } else if (event.type === 'error') {
       items.push({
         id: event.id,

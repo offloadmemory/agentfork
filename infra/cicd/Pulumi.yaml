@@ -1,5 +1,0 @@
-name: chatbot-cicd
-runtime: nodejs
-description: Chatbot — AWS CodePipeline CI/CD
-backend:
-  url: s3://chatbot-pulumi-state?region=us-east-1&awssdk=v2

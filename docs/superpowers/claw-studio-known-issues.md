@@ -149,14 +149,14 @@ mock. ~2 lines.
 
 ---
 
-## 🟠 5. `prisma migrate dev` wants to drop the database
+## 🟡 5. PARTIALLY FIXED (2026-10-17) — `prisma migrate dev` wants to drop the database
 
 **Where:** repo-wide Prisma workflow.
 
-**Problem:** `migrate dev` reports drift and offers only a reset. The drift is permanent and by design:
-the `checkpoint_*` tables are created at runtime by `@langchain/langgraph-checkpoint-postgres` and are
-deliberately absent from `schema.prisma`, and the `embedding` indexes are pgvector indexes Prisma
-cannot represent (`Unsupported("vector(1024)")`).
+**Problem:** `migrate dev` reports drift and offers only a reset. Two independent sources of drift:
+the `checkpoint_*` tables, created at runtime by `@langchain/langgraph-checkpoint-postgres` and
+previously absent from `schema.prisma`; and the `embedding` indexes, pgvector indexes Prisma cannot
+represent (`Unsupported("vector(1024)")`).
 
 **Verified:** `migrate dev` output listed exactly those tables/indexes as drift and demanded a reset.
 
@@ -164,8 +164,26 @@ cannot represent (`Unsupported("vector(1024)")`).
 
 **Fix / workaround (in use):** hand-author `prisma/migrations/<ts>_<name>/migration.sql` and apply with
 `prisma migrate deploy`, which ignores drift and is what `bun run setup` and container start already
-use. Documented in `libs/claw-studio/CLAUDE.md`. A real fix would add the checkpoint tables and
-pgvector indexes to the schema (via `Unsupported`/raw SQL migrations) so drift is genuinely empty.
+use. Documented in `libs/claw-studio/CLAUDE.md`.
+
+**Partially fixed (2026-10-17):** the checkpoint-table half is genuinely fixable and now fixed — all 4
+tables (`checkpoint_migrations`, `checkpoints`, `checkpoint_blobs`, `checkpoint_writes`) use only
+standard Postgres types (TEXT, JSONB, BYTEA, INTEGER) with composite primary keys, fully expressible in
+Prisma's schema language with no `Unsupported` needed. Added `CheckpointMigration`/`Checkpoint`/
+`CheckpointBlob`/`CheckpointWrite` models to `schema.prisma` (mapped via `@@map` to the exact table
+names `PostgresSaver` uses) and a hand-authored `prisma/migrations/20261017120000_add_checkpoint_tables/
+migration.sql` that creates them with the identical `CREATE TABLE IF NOT EXISTS` DDL
+`PostgresSaver.setup()` runs at runtime — so this is a no-op on every existing deployment (where
+`.setup()` already created the tables) and provisions them up front on a fresh database. Verified
+end-to-end against a disposable Postgres: deployed all migrations from scratch, ran `.setup()`
+(idempotent, no error), then confirmed via `prisma migrate diff --from-url ... --to-schema-datamodel`
+that the checkpoint tables are no longer reported as drift at all — only the two pgvector HNSW indexes
+remain. `libs/claw-studio`'s `persistence.test.ts` (real Postgres) still passes unchanged.
+
+**Still open:** the pgvector HNSW index half is a genuine, permanent Prisma limitation — there is no
+`Unsupported()` (or anything else) for an index, only for a column type, so `prisma migrate dev` will
+always report `claw_memories_embedding_hnsw` and `idx_document_chunks_embedding` as drift. The existing
+`migrate deploy` + hand-authored-migration workflow remains required for those two indexes.
 
 ---
 
@@ -418,6 +436,27 @@ misconfigured row has `embeddingDimensions: null`, so `&&` short-circuited and t
   reachable in the session that made this fix, so the row itself is still wrong — the guardrail will now
   at least surface a clear `ClawEmbeddingsConfigError` instead of a raw Postgres 22000 until it's
   corrected.
+
+  Exact remediation, once DB access is available — find the affected row(s) first (any provider whose
+  stored dimension doesn't match the column, or whose model is a known mismatch like Titan G1):
+
+  ```sql
+  SELECT id, "tenantId", "embeddingModel", "embeddingDimensions" FROM llm_providers
+  WHERE "embeddingModel" IS NOT NULL
+    AND ("embeddingDimensions" IS NULL OR "embeddingDimensions" != 1024);
+  ```
+
+  Then, per affected row (nothing was ever successfully written at the wrong dimension, so no
+  re-embedding is required — this is a config correction, not a data migration):
+
+  ```sql
+  UPDATE llm_providers
+  SET "embeddingModel" = 'amazon.titan-embed-text-v2:0', "embeddingDimensions" = 1024
+  WHERE id = '<affected row id>';
+  ```
+
+  This is deployment-specific data, not something a PR against this repo can fix — recorded here so
+  whoever has DB access can apply it directly from the issue, without re-deriving the root cause.
 
 ---
 

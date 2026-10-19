@@ -41,7 +41,7 @@ export class OpenAICompatibleProvider implements LLMProvider {
       onFinish,
     } = options;
     return streamText({
-      model: this.client(model ?? this.chatModel),
+      model: this.client.chat(model ?? this.chatModel),
       messages,
       system,
       temperature,

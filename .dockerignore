@@ -1,12 +1,17 @@
-node_modules
-*/node_modules
+# Docker's ignore patterns are anchored to the build context root unless they
+# start with "**", so a bare ".next" only matches ./.next — it does NOT match
+# apps/web-ui/.next. Left unanchored that stale build output is 446 MB of the
+# context, and it also shadows the directory the Dockerfile builds into.
 **/node_modules
 .git
-.env
-.env.local
-.env.*.local
-dist
-.next
+**/.env
+**/.env.local
+**/.env.*.local
+**/dist
+**/.next
+**/.source
+**/coverage
+**/*.tsbuildinfo
 *.log
 .DS_Store
 coverage

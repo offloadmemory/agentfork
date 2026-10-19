@@ -29,15 +29,23 @@ rather than fighting it.
 
 ## Migrations: never use `prisma migrate dev`
 
-It wants to **reset the database**. The drift it reports is permanent and by design:
+It wants to **reset the database**. One source of drift was fixed (see below); one is permanent and
+by design:
 
-- `checkpoint_*` tables are created at runtime by `@langchain/langgraph-checkpoint-postgres` and are
-  deliberately absent from `schema.prisma`.
-- The `embedding` indexes are pgvector indexes Prisma cannot represent (`Unsupported("vector(1024)")`).
+- ~~`checkpoint_*` tables created at runtime by `@langchain/langgraph-checkpoint-postgres`~~ — **fixed**.
+  `CheckpointMigration`/`Checkpoint`/`CheckpointBlob`/`CheckpointWrite` in `schema.prisma` now model
+  these 4 tables (mapped to `checkpoint_migrations`/`checkpoints`/`checkpoint_blobs`/`checkpoint_writes`),
+  and `prisma/migrations/20261017120000_add_checkpoint_tables/migration.sql` creates them with the exact
+  `CREATE TABLE IF NOT EXISTS` DDL `PostgresSaver.setup()` itself runs — so an existing deployment where
+  `.setup()` already created them gets a no-op, and a fresh database gets them up front. `prisma migrate
+  dev` no longer reports these as drift.
+- The `embedding` indexes are still pgvector HNSW indexes Prisma cannot represent — there is no
+  `Unsupported()` (or anything else) for an index, only for a column type, so this half is permanent.
 
-Hand-author the migration SQL under `prisma/migrations/<YYYYMMDDHHMMSS>_<name>/migration.sql` with a
-round timestamp (matching the recent claw migrations) and apply with `bunx prisma migrate deploy`,
-which ignores drift and is what `bun run setup` and container start already use.
+For this remaining half, hand-author the migration SQL under
+`prisma/migrations/<YYYYMMDDHHMMSS>_<name>/migration.sql` with a round timestamp (matching the recent
+claw migrations) and apply with `bunx prisma migrate deploy`, which ignores drift and is what `bun run
+setup` and container start already use.
 
 ## The agent loop
 

@@ -12,6 +12,7 @@
 
 import { createLogger } from '@chatbot/shared';
 import { getConnectorRegistry } from '../connectors/registry';
+import { ClawConnectorConfigService } from '../connectors/config-service';
 import { getRunService } from './run-service';
 import { isTerminalStatus, type ChannelAdapter, type GatewayMessage, type ReplyAction } from './types';
 import type { ChannelType } from '../connectors/types';
@@ -40,6 +41,13 @@ export interface GatewayJobPayload {
   /** `cancel` is dashboard-only; channels only ever send the three ReplyActions. */
   action?: ReplyAction | 'cancel';
   content?: string;
+  /**
+   * The platform user id that made this decision, when it came from a
+   * channel. Threaded through to the run's `approval_decision` event so a
+   * standing grant (`approve_always`) is attributable to a person, not just
+   * to "someone in the workspace" (known-issues #11/#13).
+   */
+  approvedBy?: string;
 }
 
 export type EnqueueRunFn = (payload: GatewayJobPayload) => Promise<void>;
@@ -196,11 +204,46 @@ async function handleResume(
     return json({ error: 'Reply was empty.' }, 400);
   }
 
+  // Approve/reject/approve_always come from a channel button or thread reply —
+  // the signature check above proves the request came from the right
+  // *workspace*, not that the clicker is anyone in particular. Without this,
+  // any member who can see the approval message can press it.
+  // (docs/superpowers/claw-studio-known-issues.md #11)
+  if (reply.action === 'approve' || reply.action === 'approve_always' || reply.action === 'reject') {
+    const connectorConfig = await new ClawConnectorConfigService(run.tenantId).getRaw(
+      message.channelType,
+    );
+    const approverIds = connectorConfig?.approverIds ?? [];
+    const isAllowlisted =
+      approverIds.length > 0 && !!message.userId && approverIds.includes(message.userId);
+
+    if (approverIds.length > 0 && !isAllowlisted) {
+      logger.warn(
+        { runId: run.runId, channel: adapter.channelType, userId: message.userId },
+        'Resume action from a user not on the channel approver allowlist — ignoring',
+      );
+      return await adapter.sendAck(req, run.runId);
+    }
+
+    // approve_always grants a STANDING permission on the task (not a one-time
+    // action), so trusting "anyone in the workspace" by default is too
+    // consequential — require an explicit allowlist before it can be used at
+    // all, same as the known-issues register's own stopgap suggestion.
+    if (approverIds.length === 0 && reply.action === 'approve_always') {
+      logger.warn(
+        { runId: run.runId, channel: adapter.channelType },
+        'approve_always requested with no approver allowlist configured for this channel — ignoring',
+      );
+      return await adapter.sendAck(req, run.runId);
+    }
+  }
+
   await deps.enqueue({
     runId: run.runId,
     tenantId: run.tenantId,
     action: reply.action,
     content: reply.content,
+    approvedBy: message.userId,
   });
 
   logger.info(
