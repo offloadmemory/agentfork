@@ -10,12 +10,7 @@ name: Build & push web-ui image
 
 on:
   push:
-    # ci/github-actions-cd is included temporarily so this workflow can be
-    # exercised before it lands on the default branch. GitHub only exposes
-    # workflow_dispatch for workflows already on the default branch, so a push
-    # trigger on the working branch is the only way to test it end to end.
-    # Drop this entry once merged.
-    branches: [main, ci/github-actions-cd]
+    branches: [main]
     paths:
       - "apps/web-ui/**"
       - "apps/sdk/**"
@@ -94,7 +89,9 @@ jobs:
           # Inlined into the client bundle by `next build`, so it must be a build
           # arg — a runtime env var would arrive too late to affect the bundle.
           build-args: |
-            NEXT_PUBLIC_MISSION_CONTROL_URL=${{ vars.NEXT_PUBLIC_MISSION_CONTROL_URL || 'http://localhost:3010/mission-control' }}
+            # Required, not defaulted: a missing value must fail the build rather than
+            # silently bake a localhost URL into a production image's client bundle.
+            NEXT_PUBLIC_MISSION_CONTROL_URL=${{ vars.NEXT_PUBLIC_MISSION_CONTROL_URL }}
 
       - name: Summary
         run: |
