@@ -186,12 +186,11 @@ modules/<module>/        # specs grouped by product module (auth, sso, marketing
 
 ## Git Workflow
 
-This repo mirrors to **two remotes** — `origin` pushes to both GitHub and Bitbucket, so a single `git push` lands on both. See **`docs/dev/git-workflow.md`** for the full procedure (remote layout, single-target pushes, keeping the remotes in sync). Key rules:
+GitHub is the **only** remote — this repo no longer mirrors to Bitbucket. See **`docs/dev/git-workflow.md`** for the full procedure. Key rules:
 
-- Default `git push` fans out to GitHub + Bitbucket. Use `git push github <branch>` / `git push bitbucket <branch>` for a single target.
+- `origin` is `github.com:offloadmemory/agentfork.git`. A plain `git push` targets GitHub.
 - Work on a feature branch; open a PR into `main` (`gh pr create --base main`). Don't push to `main` directly; only the user merges.
 - `.env.example` holds placeholders only — never commit real secrets. If GitHub push protection blocks a key, stop and tell the user; don't use the allow-secret bypass yourself.
-- Fetch is GitHub-only: pull Bitbucket-direct changes with `git fetch bitbucket && git merge bitbucket/main`.
 
 ## Code Style
 
