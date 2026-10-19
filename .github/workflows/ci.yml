@@ -13,13 +13,6 @@ concurrency:
 jobs:
   lint-and-test:
     runs-on: ubuntu-latest
-<<<<<<< fix/prisma-checkpoint-tables-drift
-
-    # Several unit tests (claw-studio's persistence.test.ts, memory-tools.test.ts,
-    # claw-runtime.test.ts) are integration-style against a real Postgres rather
-    # than mocked — see libs/claw-studio/CLAUDE.md. Mirrors docker-compose.yml's
-    # postgres service (same image/credentials) so CI behaves like local dev.
-=======
     # Build and e2e both boot the app, so they need a real database and the
     # secrets NextAuth refuses to start without. Values are throwaway CI-only.
     env:
@@ -37,7 +30,6 @@ jobs:
     # TEST_DATABASE_URL in src/agent/persistence.test.ts, which pins port 5433).
     # Without this the suite fails with connection errors rather than assertion
     # failures, which reads like a code bug and is not.
->>>>>>> main
     services:
       postgres:
         image: pgvector/pgvector:pg16
@@ -46,36 +38,12 @@ jobs:
           POSTGRES_USER: chatbot_admin
           POSTGRES_PASSWORD: chatbot_dev
         ports:
-<<<<<<< fix/prisma-checkpoint-tables-drift
-          - 5432:5432
-          # claw-studio's persistence.test.ts hardcodes localhost:5433 (see
-          # libs/claw-studio/src/agent/persistence.test.ts) rather than reading
-          # DATABASE_URL — it's matching docker-compose.yml's local-dev port
-          # mapping, not a config bug worth "fixing" out from under local dev.
-          # Mapping both host ports onto the same container is simplest.
-=======
->>>>>>> main
           - 5433:5432
         options: >-
           --health-cmd "pg_isready -U chatbot_admin -d chatbot"
           --health-interval 5s
           --health-timeout 5s
           --health-retries 10
-<<<<<<< fix/prisma-checkpoint-tables-drift
-
-    # Dummy, non-secret values — this job never talks to a real AWS/Bedrock
-    # account. DATABASE_URL and NEXTAUTH_SECRET are genuinely required (no
-    # default) by libs/claw-studio, apps/workers and apps/mission-control's
-    # own T3 Env schemas, so test/build fail at import time without them.
-    env:
-      DATABASE_URL: postgresql://chatbot_admin:chatbot_dev@localhost:5432/chatbot?schema=public
-      NEXTAUTH_SECRET: ci-only-dummy-secret-not-used-for-anything-real
-      NEXTAUTH_URL: http://localhost:3005
-      ENCRYPTION_KEY: "0000000000000000000000000000000000000000000000000000000000000000"
-      AWS_REGION: us-east-1
-
-=======
->>>>>>> main
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -88,32 +56,11 @@ jobs:
       - name: Install dependencies
         run: bun install --frozen-lockfile
 
-<<<<<<< fix/prisma-checkpoint-tables-drift
-      - name: Apply database migrations
-        # migrate deploy, never migrate dev — see root CLAUDE.md: `migrate dev`
-        # reports permanent drift (LangGraph checkpoint tables, pgvector HNSW
-        # indexes Prisma can't model) and offers only a destructive reset.
-        run: bunx prisma migrate deploy --schema=./prisma/schema.prisma
-
-      - name: Generate Fumadocs types
-        # web-ui's docs route reads `@/.source`, a file fumadocs-mdx generates
-        # from apps/web-ui/source.config.ts rather than committing to the repo.
-        # The Next.js plugin (createMDX in next.config.ts) generates it as a
-        # side effect of `next dev`/`next build`, but a standalone `tsc --noEmit`
-        # never triggers that plugin, so typecheck fails on a fresh clone with
-        # "Cannot find module '@/.source'" until this runs first.
-        run: cd apps/web-ui && bunx fumadocs-mdx
-
-      - name: Type check
-        run: bun run typecheck
-
-=======
       - name: Prepare test database
         # migrate deploy, not db push: the HNSW pgvector indexes live in raw SQL
         # inside migrations, and db push silently skips them.
         run: bunx prisma migrate deploy --schema=./prisma/schema.prisma
 
->>>>>>> main
       - name: Unit tests
         run: bun run test
 
@@ -124,31 +71,11 @@ jobs:
       # libs/whatsapp/src/processor/agent-executor.ts and
       # libs/claw-studio/src/mcp/mcp-tools.ts), so the whole monorepo builds.
       - name: Build
-        # Known gap, not yet fixed: agent-studio:build fails outside Docker —
-        # libs/whatsapp imports `@chatbot/agent-studio/server` through the path
-        # alias in tsconfig.base.json, but @nx/js:tsc's dependency-closure build
-        # doesn't resolve that cross-package alias the way apps/workers/Dockerfile's
-        # hand-built node_modules/@chatbot/agent-studio/package.json "exports" map
-        # does (see the Dockerfile's own comments on this pattern). The Docker
-        # build is what actually ships, so this is a local/CI tsc limitation on a
-        # path nothing here currently depends on going green. Left on rather than
-        # removed, so a regression elsewhere in the build is still visible.
-        continue-on-error: true
         run: bun run build
 
       - name: Install Playwright browsers
         run: bunx playwright install --with-deps chromium
 
-<<<<<<< fix/prisma-checkpoint-tables-drift
-      - name: E2E tests
-        # Known gap, not yet fixed: e2e also needs an S3-compatible object
-        # store (docker-compose.yml's minio service) and more secrets than
-        # this job sets up, so it is not expected to be reliably green yet.
-        # Left on rather than removed, so a failure here is visible without
-        # blocking the rest of CI on it.
-        continue-on-error: true
-        run: bun run e2e
-=======
       # e2e is intentionally NOT run here yet.
       #
       # Playwright's webServer runs `bun run dev:all`, which starts four servers in
@@ -162,7 +89,6 @@ jobs:
       #
       # - name: E2E tests
       #   run: bunx nx e2e web-ui-e2e -- --grep-invert @sso
->>>>>>> main
 
       - name: Upload Playwright report
         if: failure()
@@ -171,3 +97,9 @@ jobs:
           name: playwright-report
           path: apps/web-ui-e2e/playwright-report/
           retention-days: 7
+
+      # TODO: Add lint and typecheck scripts when ESLint / tsc targets are configured in Nx
+      # - name: Lint
+      #   run: bun run lint
+      # - name: Type check
+      #   run: bun run typecheck
