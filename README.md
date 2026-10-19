@@ -198,7 +198,7 @@ agentfork/                        # Nx workspace root
 ### 1. Clone and install
 
 ```bash
-git clone https://github.com/kartikmanimuthu/agentfork.git
+git clone https://github.com/offloadmemory/agentfork.git
 cd agentfork
 bun install
 ```
@@ -392,8 +392,8 @@ E2e specs are grouped by module (`@auth`, `@sso`, `@marketing`, `@docs`, `@navig
 ## Contributing & Support
 
 - 🤝 **Contributing** — see [CONTRIBUTING.md](CONTRIBUTING.md) for the workflow and standards.
-- 💬 **Questions & help** — see [SUPPORT.md](SUPPORT.md) or open a [Discussion](https://github.com/kartikmanimuthu/agentfork/discussions).
-- 🐛 **Bugs & features** — open an [issue](https://github.com/kartikmanimuthu/agentfork/issues/new/choose).
+- 💬 **Questions & help** — see [SUPPORT.md](SUPPORT.md) or open a [Discussion](https://github.com/offloadmemory/agentfork/discussions).
+- 🐛 **Bugs & features** — open an [issue](https://github.com/offloadmemory/agentfork/issues/new/choose).
 - 🔒 **Security** — report privately per [SECURITY.md](SECURITY.md); never via public issues.
 - 📓 **Code of Conduct** — [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md).
 

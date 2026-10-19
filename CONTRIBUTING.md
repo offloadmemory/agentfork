@@ -45,12 +45,12 @@ Use the following prefixes for consistency:
 
 ### Rules
 
-1. **Branch from `main`** and keep it up to date:
+1. **Branch from the official `main`** (`upstream/main`) and keep your fork in sync:
    ```bash
-   git checkout main
-   git pull origin main
-   git checkout -b feat/your-feature
+   git fetch upstream
+   git checkout -b feat/your-feature upstream/main
    ```
+   Push the branch to your fork (`git push -u origin feat/your-feature`) and open the PR from your fork into `offloadmemory/agentfork:main`. See [docs/dev/git-workflow.md](docs/dev/git-workflow.md).
 2. **One concern per PR** — do not mix unrelated changes.
 3. **Keep branches short-lived** — aim to merge within a few days.
 4. **Delete branches after merge** — GitHub can do this automatically.
@@ -101,4 +101,4 @@ We use [Conventional Commits](https://www.conventionalcommits.org/):
 
 ## Questions?
 
-Open a [Discussion](https://github.com/kartikmanimuthu/agentfork/discussions) or reach out in an issue.
+Open a [Discussion](https://github.com/offloadmemory/agentfork/discussions) or reach out in an issue.

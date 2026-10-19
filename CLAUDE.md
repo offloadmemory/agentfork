@@ -186,10 +186,21 @@ modules/<module>/        # specs grouped by product module (auth, sso, marketing
 
 ## Git Workflow
 
-GitHub is the **only** remote — this repo no longer mirrors to Bitbucket. See **`docs/dev/git-workflow.md`** for the full procedure. Key rules:
+Two roles, one repository. Use the part that matches how you have this cloned. See **`docs/dev/git-workflow.md`** for the full procedure.
 
-- `origin` is `github.com:offloadmemory/agentfork.git`. A plain `git push` targets GitHub.
-- Work on a feature branch; open a PR into `main` (`gh pr create --base main`). Don't push to `main` directly; only the user merges.
+**Maintainer / core clone**
+
+- `origin` is `github.com:offloadmemory/agentfork.git`; a plain `git push` targets it.
+- Branch → PR into `main` (`gh pr create --base main`). Never push to `main` directly; only the owner merges.
+
+**External contributor (fork)**
+
+- `origin` is your fork; `upstream` is `offloadmemory/agentfork` with pushes disabled (`git remote set-url --push upstream no_push`).
+- Branch from `upstream/main`, push to `origin`, open the PR against `upstream` `main`.
+- Sync your fork with `git fetch upstream && git merge --ff-only upstream/main && git push origin main`.
+
+**Both**
+
 - `.env.example` holds placeholders only — never commit real secrets. If GitHub push protection blocks a key, stop and tell the user; don't use the allow-secret bypass yourself.
 
 ## Code Style
