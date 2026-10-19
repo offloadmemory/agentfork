@@ -3,6 +3,12 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 const { mockCreateOpenAI, mockStreamText } = vi.hoisted(() => ({
   mockCreateOpenAI: vi.fn(() => {
     const provider = (model: string) => ({ modelId: model, provider: 'openai-compatible' });
+    // streamChat calls `this.client.chat(model)`, not the bare callable — the
+    // bare call routes to OpenAIResponsesModelId/`/v1/responses`, which most
+    // OpenAI-compatible gateways (Ollama, vLLM, LiteLLM, ...) never implement.
+    // `.chat()` routes to OpenAIChatModelId/`/v1/chat/completions`, which they
+    // all support. See openai-compatible.ts's streamChat for the full story.
+    provider.chat = (model: string) => ({ modelId: model, provider: 'openai-compatible' });
     provider.textEmbeddingModel = (model: string) => ({ modelId: model, type: 'embedding' });
     return provider;
   }),

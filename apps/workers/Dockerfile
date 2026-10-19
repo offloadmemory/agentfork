@@ -51,7 +51,7 @@ COPY libs/ai/ libs/ai/
 RUN cd libs/ai && bunx tsc --project tsconfig.lib.json && \
     mkdir -p /app/node_modules/@chatbot/ai && \
     cp -rL /app/dist/libs/ai/libs/ai/src /app/node_modules/@chatbot/ai/src && \
-    printf '{"name":"@chatbot/ai","version":"0.0.1","type":"module","main":"src/index.js","types":"src/index.d.ts"}\n' > /app/node_modules/@chatbot/ai/package.json
+    printf '{"name":"@chatbot/ai","version":"0.0.1","type":"module","main":"src/index.js","types":"src/index.d.ts","exports":{".":"./src/index.js","./*":"./src/*.js"}}\n' > /app/node_modules/@chatbot/ai/package.json
 
 COPY libs/knowledge-base/ libs/knowledge-base/
 RUN cd libs/knowledge-base && bunx tsc --project tsconfig.lib.json && \
