@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
-const { mockRegistry, mockRunService, adapter } = vi.hoisted(() => {
+const { mockRegistry, mockRunService, mockConnectorConfigService, adapter } = vi.hoisted(() => {
   const adapter = {
     channelType: 'slack',
     displayName: 'Slack',
@@ -26,6 +26,7 @@ const { mockRegistry, mockRunService, adapter } = vi.hoisted(() => {
       list: vi.fn(() => [adapter]),
     },
     mockRunService: { create: vi.fn(), get: vi.fn() },
+    mockConnectorConfigService: { getRaw: vi.fn() },
   };
 });
 
@@ -35,6 +36,12 @@ vi.mock('@chatbot/shared', () => ({
 
 vi.mock('../connectors/registry', () => ({ getConnectorRegistry: () => mockRegistry }));
 vi.mock('./run-service', () => ({ getRunService: () => mockRunService }));
+// Default (no allowlist configured) preserves the pre-existing permissive
+// behavior for plain approve/reject; approve_always is covered explicitly
+// below since it default-denies with no allowlist regardless.
+vi.mock('../connectors/config-service', () => ({
+  ClawConnectorConfigService: vi.fn(() => mockConnectorConfigService),
+}));
 
 import { handleInbound } from './gateway-service';
 
@@ -66,6 +73,8 @@ beforeEach(() => {
   adapter.getConfig.mockResolvedValue({ enabled: true });
   adapter.parseInbound.mockResolvedValue(newRunMessage);
   mockRunService.create.mockResolvedValue(createdRun);
+  // No allowlist configured by default.
+  mockConnectorConfigService.getRaw.mockResolvedValue(null);
 });
 
 describe('handleInbound', () => {
@@ -114,6 +123,8 @@ describe('handleInbound', () => {
     // Enqueue before ack: acking first would promise the user a run that might
     // never be queued.
     expect(order).toEqual(['create', 'enqueue', 'ack']);
+    // A fresh run has no approver decision to attribute — approvedBy is
+    // only threaded through on a HIL resume.
     expect(enqueue).toHaveBeenCalledWith({ runId: 'run_new', tenantId: 'tenant1' });
   });
 
@@ -194,6 +205,7 @@ describe('handleInbound — HIL resume', () => {
       tenantId: 'tenant1',
       action: 'approve',
       content: undefined,
+      approvedBy: 'U1',
     });
     // A resume must never create a second run.
     expect(mockRunService.create).not.toHaveBeenCalled();
@@ -270,6 +282,7 @@ describe('handleInbound — HIL resume', () => {
       tenantId: 'tenant1',
       action: 'clarification_response',
       content: 'the blue one',
+      approvedBy: 'U1',
     });
   });
 
@@ -292,6 +305,95 @@ describe('handleInbound — HIL resume', () => {
     const res = await handleInbound('slack', req(), deps);
 
     expect(res.status).toBe(400);
+    expect(enqueue).not.toHaveBeenCalled();
+  });
+});
+
+describe('handleInbound — HIL resume — approver allowlist', () => {
+  const replyMessage = {
+    ...newRunMessage,
+    taskDescription: '',
+    replyContext: { runId: 'run_existing', action: 'approve' as const, tenantId: 'tenant1' },
+  };
+
+  beforeEach(() => {
+    adapter.parseInbound.mockResolvedValue(replyMessage);
+    mockRunService.get.mockResolvedValue({
+      runId: 'run_existing',
+      tenantId: 'tenant1',
+      status: 'awaiting_approval',
+    });
+  });
+
+  it('ignores an approve from a user who is not on the configured allowlist', async () => {
+    mockConnectorConfigService.getRaw.mockResolvedValue({ approverIds: ['someone-else'] });
+
+    const res = await handleInbound('slack', req(), deps);
+
+    expect(res.status).toBe(200);
+    expect(enqueue).not.toHaveBeenCalled();
+  });
+
+  it('queues an approve from a user who is on the configured allowlist', async () => {
+    mockConnectorConfigService.getRaw.mockResolvedValue({ approverIds: ['U1', 'U2'] });
+
+    const res = await handleInbound('slack', req(), deps);
+
+    expect(res.status).toBe(200);
+    expect(enqueue).toHaveBeenCalledWith(
+      expect.objectContaining({ runId: 'run_existing', action: 'approve', approvedBy: 'U1' }),
+    );
+  });
+
+  it('queues a plain approve with no allowlist configured — unchanged back-compat behavior', async () => {
+    mockConnectorConfigService.getRaw.mockResolvedValue(null);
+
+    const res = await handleInbound('slack', req(), deps);
+
+    expect(res.status).toBe(200);
+    expect(enqueue).toHaveBeenCalledWith(
+      expect.objectContaining({ runId: 'run_existing', action: 'approve', approvedBy: 'U1' }),
+    );
+  });
+
+  it('ignores approve_always with no allowlist configured — a standing grant needs one', async () => {
+    mockConnectorConfigService.getRaw.mockResolvedValue(null);
+    adapter.parseInbound.mockResolvedValue({
+      ...replyMessage,
+      replyContext: { ...replyMessage.replyContext, action: 'approve_always' as const },
+    });
+
+    const res = await handleInbound('slack', req(), deps);
+
+    expect(res.status).toBe(200);
+    expect(enqueue).not.toHaveBeenCalled();
+  });
+
+  it('queues approve_always once an allowlist is configured and the user is on it', async () => {
+    mockConnectorConfigService.getRaw.mockResolvedValue({ approverIds: ['U1'] });
+    adapter.parseInbound.mockResolvedValue({
+      ...replyMessage,
+      replyContext: { ...replyMessage.replyContext, action: 'approve_always' as const },
+    });
+
+    const res = await handleInbound('slack', req(), deps);
+
+    expect(res.status).toBe(200);
+    expect(enqueue).toHaveBeenCalledWith(
+      expect.objectContaining({ action: 'approve_always', approvedBy: 'U1' }),
+    );
+  });
+
+  it('ignores a reject from a user who is not on the configured allowlist', async () => {
+    mockConnectorConfigService.getRaw.mockResolvedValue({ approverIds: ['someone-else'] });
+    adapter.parseInbound.mockResolvedValue({
+      ...replyMessage,
+      replyContext: { ...replyMessage.replyContext, action: 'reject' as const },
+    });
+
+    const res = await handleInbound('slack', req(), deps);
+
+    expect(res.status).toBe(200);
     expect(enqueue).not.toHaveBeenCalled();
   });
 });
