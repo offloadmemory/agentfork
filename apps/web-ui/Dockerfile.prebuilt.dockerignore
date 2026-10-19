@@ -1,0 +1,31 @@
+# Ignore rules for Dockerfile.prebuilt only.
+#
+# The shared ../../.dockerignore excludes **/.next, but this Dockerfile exists to
+# package an already-built Next.js standalone output — it needs .next in the build
+# context. Docker prefers a file named <dockerfile>.dockerignore over the shared
+# one, so the exclusion can stay in place for the normal Dockerfile (where it is
+# load-bearing: a stale .next is ~446 MB and shadows the directory the build writes
+# into) without breaking this one.
+#
+# Note this applies to the whole build context, so the paths are the repo-root ones.
+
+**/node_modules
+.git
+**/env
+**/.env
+**/.env.local
+**/.env.*.local
+**/dist
+**/.source
+**/coverage
+**/*.tsbuildinfo
+**/.nx
+**/test-results
+**/playwright-report
+*.log
+.DS_Store
+.vscode
+.idea
+*.swp
+*.swo
+*~

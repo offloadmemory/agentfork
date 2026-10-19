@@ -39,20 +39,6 @@
         "command": "cd infra/networking && pulumi preview --stack prod && cd ../compute && PULUMI_CONFIG_PASSPHRASE=\"\" pulumi preview --stack prod",
         "cwd": "."
       }
-    },
-    "deploy-cicd": {
-      "executor": "nx:run-commands",
-      "options": {
-        "command": "cd infra/cicd && npm install && pulumi up --yes --stack prod",
-        "cwd": "."
-      }
-    },
-    "preview-cicd": {
-      "executor": "nx:run-commands",
-      "options": {
-        "command": "cd infra/cicd && pulumi preview --stack prod",
-        "cwd": "."
-      }
     }
   }
 }

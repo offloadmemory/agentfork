@@ -7,6 +7,30 @@ export { createLogger } from './logging/logger';
 // Utils
 export { withTimeout, TimeoutError } from './utils/with-timeout';
 
+// PII redaction (irreversible placeholders, for persisted/displayed observability data)
+export {
+  redactText,
+  redactDeep,
+  DEFAULT_PII_RULES,
+  SAUDE_RULES,
+  REDACTED_PLACEHOLDER,
+  TRUNCATED_PLACEHOLDER,
+  NodeTraceCollector,
+  sanitizeExecutionEvent,
+  sanitizeTraceEntry,
+  truncateValue,
+} from './pii';
+export type {
+  PiiRule,
+  PiiCategory,
+  CustomPiiPattern,
+  RedactOptions,
+  NodeTraceLike,
+  PersistedNodeTrace,
+  PersistedTraceOutput,
+  TraceEvent,
+} from './pii';
+
 // Database
 export { getPrismaClient, disconnectPrisma } from './db/prisma-client';
 export { getTenantClient, TENANT_SCOPED_MODELS } from './db/tenant-middleware';
