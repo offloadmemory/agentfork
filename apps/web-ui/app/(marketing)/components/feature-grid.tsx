@@ -36,9 +36,9 @@ const features = [
   },
   {
     icon: KeyRound,
-    title: 'Cognito Auth',
+    title: 'Google Auth',
     description:
-      'NextAuth with AWS Cognito SSO and credentials login.',
+      'NextAuth with Google OAuth SSO and credentials login.',
   },
   {
     icon: MessageSquare,
