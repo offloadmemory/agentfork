@@ -10,11 +10,11 @@
  * pg-boss — the caller (Mission Control) owns the queue client.
  */
 
-import { createLogger } from '@chatbot/shared';
+import { createLogger, AuditService } from '@chatbot/shared';
 import { getConnectorRegistry } from '../connectors/registry';
 import { ClawConnectorConfigService } from '../connectors/config-service';
 import { getRunService } from './run-service';
-import { isTerminalStatus, type ChannelAdapter, type GatewayMessage, type ReplyAction } from './types';
+import { isTerminalStatus, type ChannelAdapter, type ClawRunRecord, type GatewayMessage, type ReplyAction } from './types';
 import type { ChannelType } from '../connectors/types';
 
 const logger = createLogger('claw-studio:gateway:inbound');
@@ -47,7 +47,7 @@ export interface GatewayJobPayload {
    * standing grant (`approve_always`) is attributable to a person, not just
    * to "someone in the workspace" (known-issues #11/#13).
    */
-  approvedBy?: string;
+  actorId?: string;
 }
 
 export type EnqueueRunFn = (payload: GatewayJobPayload) => Promise<void>;
@@ -150,6 +150,37 @@ export async function handleInbound(
 }
 
 /**
+ * Records an authorization denial before returning generic, private feedback.
+ * The run and tenant were already resolved, so this does not reveal run existence.
+ */
+async function denyApproval(
+  adapter: ChannelAdapter,
+  req: Request,
+  run: ClawRunRecord,
+  message: GatewayMessage,
+  action: ReplyAction,
+  reason: 'not_allowlisted' | 'allowlist_required',
+): Promise<Response> {
+  await AuditService.logUserAction({
+    eventType: 'claw.gateway.approval_denied',
+    action: 'Denied channel approval',
+    resourceType: 'claw_run',
+    resourceId: run.runId,
+    resourceName: 'Claw run',
+    user: message.userId || 'unknown',
+    userType: 'user',
+    status: 'warning',
+    severity: 'high',
+    details: 'Approval action rejected by channel authorization policy',
+    metadata: { tenantId: run.tenantId, channel: message.channelType, action, reason },
+    tenantId: run.tenantId,
+  });
+  return adapter.sendDenial
+    ? adapter.sendDenial(req, run.runId)
+    : adapter.sendAck(req, run.runId);
+}
+
+/**
  * A HIL reply (button press, thread reply) re-enters the same inbound route and
  * is disambiguated by `replyContext`, so there is no separate endpoint to
  * secure. Trust comes from the adapter's signature check, which already ran.
@@ -222,7 +253,7 @@ async function handleResume(
         { runId: run.runId, channel: adapter.channelType, userId: message.userId },
         'Resume action from a user not on the channel approver allowlist — ignoring',
       );
-      return await adapter.sendAck(req, run.runId);
+      return await denyApproval(adapter, req, run, message, reply.action, 'not_allowlisted');
     }
 
     // approve_always grants a STANDING permission on the task (not a one-time
@@ -234,7 +265,7 @@ async function handleResume(
         { runId: run.runId, channel: adapter.channelType },
         'approve_always requested with no approver allowlist configured for this channel — ignoring',
       );
-      return await adapter.sendAck(req, run.runId);
+      return await denyApproval(adapter, req, run, message, reply.action, 'allowlist_required');
     }
   }
 
@@ -243,7 +274,7 @@ async function handleResume(
     tenantId: run.tenantId,
     action: reply.action,
     content: reply.content,
-    approvedBy: message.userId,
+    actorId: message.userId,
   });
 
   logger.info(

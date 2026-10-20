@@ -114,6 +114,11 @@ export class ClawConnectorConfigService {
 
     for (const [key, value] of Object.entries(stored)) {
       if (key === 'enabled') continue;
+      // This allowlist contains public platform user IDs, not secret credentials.
+      if (key === 'approverIds' && Array.isArray(value)) {
+        fields[key] = value.join(', ');
+        continue;
+      }
       if (typeof value !== 'string' || !value) continue;
 
       if (secretKeys.includes(key)) {
@@ -142,7 +147,7 @@ export class ClawConnectorConfigService {
    */
   async save(
     channel: ChannelType,
-    input: Record<string, string | boolean | undefined>,
+    input: Record<string, string | boolean | string[] | undefined>,
     updatedBy = 'system',
   ): Promise<void> {
     const stored = (await this.getStored(channel)) ?? {};
@@ -151,6 +156,15 @@ export class ClawConnectorConfigService {
 
     for (const [key, value] of Object.entries(input)) {
       if (key === 'enabled') continue;
+      if (key === 'approverIds') {
+        if (!Array.isArray(value) ||
+            value.length > 50 ||
+            !value.every((id) => typeof id === 'string' && id.trim().length > 0 && id.length <= 128)) {
+          throw new Error('Invalid approverIds: expected up to 50 non-empty user IDs');
+        }
+        next[key] = Array.from(new Set(value.map((id) => id.trim())));
+        continue;
+      }
       if (typeof value !== 'string') continue;
 
       const trimmed = value.trim();

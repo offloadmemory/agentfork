@@ -206,6 +206,20 @@ describe('DiscordConnector', () => {
     });
   });
 
+  describe('sendDenial', () => {
+    it('returns an ephemeral interaction response visible only to the actor', async () => {
+      const req = signedRequest({
+        type: 3, application_id: APPLICATION_ID, data: { custom_id: 'x:y' },
+      });
+      const res = await new DiscordConnector().sendDenial(req, 'run-1');
+      expect(res.status).toBe(200);
+      expect(await res.json()).toMatchObject({
+        type: 4,
+        data: { flags: 64, content: expect.stringContaining('not authorized') },
+      });
+    });
+  });
+
   describe('outbound', () => {
     const run: ClawRunRecord = {
       id: '1',

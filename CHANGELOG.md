@@ -1,3 +1,7 @@
+# Channel approval follow-up
+
+- Channel approvals now provide private denial feedback and audit events; decision identities are stored as structured metadata; Mission Control can configure per-channel approver IDs. One-time decisions remain compatible without an allowlist, while standing grants require one.
+
 # Changelog
 
 All notable changes to this project will be documented in this file.

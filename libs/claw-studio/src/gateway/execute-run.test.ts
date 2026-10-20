@@ -329,6 +329,17 @@ describe('executeRun', () => {
     expect((input as InstanceType<typeof Command>).resume).toEqual({ decisions: [{ type: 'approve' }] });
   });
 
+  it('keeps the approval content stable and attributes the decision in metadata', async () => {
+    runs.get.mockResolvedValue({ ...baseRun, status: 'awaiting_approval' });
+    await executeRun({ runId: baseRun.runId, resume: { action: 'approve', actorId: 'U1' }, deps });
+    expect(runs.appendEvent).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({
+        eventType: 'approval_decision', content: 'approved', metadata: { actorId: 'U1' },
+      }),
+    );
+  });
+
   it('supplies one approve decision per pending tool when the interrupt bundled several', async () => {
     runs.get.mockResolvedValue({
       ...baseRun,
@@ -449,6 +460,17 @@ describe('terminateRun', () => {
     expect(runs.appendEvent).toHaveBeenCalledWith(
       expect.anything(),
       expect.objectContaining({ eventType: 'approval_decision', content: 'rejected' }),
+    );
+  });
+
+  it('keeps rejection content stable with a structured actor ID', async () => {
+    runs.get.mockResolvedValue({ ...baseRun, status: 'awaiting_approval' });
+    await terminateRun({ runId: baseRun.runId, deps, kind: 'reject', actorId: 'U1' });
+    expect(runs.appendEvent).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({
+        eventType: 'approval_decision', content: 'rejected', metadata: { actorId: 'U1' },
+      }),
     );
   });
 

@@ -254,6 +254,23 @@ export class TelegramConnector implements ChannelAdapter {
     };
   }
 
+  /** Answer the clicker's callback privately so denial does not post to the chat. */
+  async sendDenial(req: Request, runId: string): Promise<Response> {
+    try {
+      const { tenantId, update } = await this.parse(req);
+      if (tenantId && update?.callback_query?.id) {
+        await this.call(tenantId, 'answerCallbackQuery', {
+          callback_query_id: update.callback_query.id,
+          text: 'You are not authorized to approve this request.',
+          show_alert: true,
+        });
+      }
+    } catch (error) {
+      logger.warn({ error, runId }, 'Unable to acknowledge denied Telegram approval');
+    }
+    return new Response('', { status: 200 });
+  }
+
   /**
    * Telegram only needs an empty 200 — but a run started from a message gets a
    * visible "on it" message whose id is remembered, so progress can be edited

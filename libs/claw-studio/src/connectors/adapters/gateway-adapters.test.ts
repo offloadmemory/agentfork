@@ -233,6 +233,19 @@ describe('SlackConnector inbound', () => {
     expect(buttonAck.status).toBe(200);
     await expect(buttonAck.text()).resolves.toBe('');
   });
+
+  it('returns a private ephemeral denial without replacing Slack approval buttons', async () => {
+    const buttonBody = new URLSearchParams({
+      payload: JSON.stringify({ type: 'block_actions', team: { id: 'T123' }, actions: [] }),
+    }).toString();
+    const res = await new SlackConnector().sendDenial(slackRequest(buttonBody), 'run_1');
+    expect(res.status).toBe(200);
+    expect(await res.json()).toMatchObject({
+      response_type: 'ephemeral',
+      replace_original: false,
+    });
+  });
+
 });
 
 const SECRET_TOKEN = 'a-high-entropy-secret-token';
@@ -325,6 +338,26 @@ describe('TelegramConnector inbound', () => {
   it('ignores messages sent by bots', async () => {
     const req = telegramRequest({ message: { text: 'beep', chat: { id: 5 }, from: { id: 1, is_bot: true } } });
     await expect(new TelegramConnector().parseInbound(req)).rejects.toThrow(/Not a user text message/);
+  });
+
+  it('answers a denied Telegram callback privately without posting to the chat', async () => {
+    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValue(
+      new Response(JSON.stringify({ ok: true, result: true }), { status: 200 }),
+    );
+    try {
+      const req = telegramRequest({
+        callback_query: { id: 'cb1', data: 'claw:approve:run_xyz', from: { id: 42 } },
+      });
+      const res = await new TelegramConnector().sendDenial(req, 'run_xyz');
+      expect(res.status).toBe(200);
+      expect(fetchSpy).toHaveBeenCalledWith(
+        expect.stringContaining('/answerCallbackQuery'),
+        expect.objectContaining({ body: expect.stringContaining('not authorized') }),
+      );
+      expect(fetchSpy).not.toHaveBeenCalledWith(expect.stringContaining('/sendMessage'), expect.anything());
+    } finally {
+      fetchSpy.mockRestore();
+    }
   });
 
   it('keeps the approve callback payload inside Telegram\'s 64-byte limit', () => {

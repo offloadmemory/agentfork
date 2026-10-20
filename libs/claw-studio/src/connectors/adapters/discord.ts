@@ -325,6 +325,16 @@ export class DiscordConnector implements ChannelAdapter {
     return json({ type: RESPONSE_DEFERRED_CHANNEL_MESSAGE });
   }
 
+  /** Discord interaction response visible only to the clicking member. */
+  async sendDenial(req: Request, runId: string): Promise<Response> {
+    const parsed = await this.parse(req).catch(() => null);
+    if (parsed?.kind !== 'component') return this.sendAck(req, runId);
+    return json({
+      type: 4, // CHANNEL_MESSAGE_WITH_SOURCE
+      data: { content: 'You are not authorized to approve this request.', flags: 64 },
+    });
+  }
+
   // ==========================================================================
   // Outbound
   // ==========================================================================

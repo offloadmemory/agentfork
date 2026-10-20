@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
-const { mockRegistry, mockRunService, mockConnectorConfigService, adapter } = vi.hoisted(() => {
+const { mockRegistry, mockRunService, mockConnectorConfigService, mockAuditLog, adapter } = vi.hoisted(() => {
   const adapter = {
     channelType: 'slack',
     displayName: 'Slack',
@@ -13,6 +13,7 @@ const { mockRegistry, mockRunService, mockConnectorConfigService, adapter } = vi
     validateRequest: vi.fn(async () => true),
     parseInbound: vi.fn(),
     sendAck: vi.fn(async () => new Response('acked', { status: 200 })),
+    sendDenial: vi.fn(async () => new Response('denied', { status: 200 })),
     sendResult: vi.fn(),
     sendError: vi.fn(),
     sendClarification: vi.fn(),
@@ -27,10 +28,12 @@ const { mockRegistry, mockRunService, mockConnectorConfigService, adapter } = vi
     },
     mockRunService: { create: vi.fn(), get: vi.fn() },
     mockConnectorConfigService: { getRaw: vi.fn() },
+    mockAuditLog: vi.fn(async () => {}),
   };
 });
 
 vi.mock('@chatbot/shared', () => ({
+  AuditService: { logUserAction: mockAuditLog },
   createLogger: vi.fn(() => ({ info: vi.fn(), warn: vi.fn(), error: vi.fn(), debug: vi.fn() })),
 }));
 
@@ -75,6 +78,7 @@ beforeEach(() => {
   mockRunService.create.mockResolvedValue(createdRun);
   // No allowlist configured by default.
   mockConnectorConfigService.getRaw.mockResolvedValue(null);
+  adapter.sendDenial.mockResolvedValue(new Response('denied', { status: 200 }));
 });
 
 describe('handleInbound', () => {
@@ -123,7 +127,7 @@ describe('handleInbound', () => {
     // Enqueue before ack: acking first would promise the user a run that might
     // never be queued.
     expect(order).toEqual(['create', 'enqueue', 'ack']);
-    // A fresh run has no approver decision to attribute — approvedBy is
+    // A fresh run has no approver decision to attribute — actorId is
     // only threaded through on a HIL resume.
     expect(enqueue).toHaveBeenCalledWith({ runId: 'run_new', tenantId: 'tenant1' });
   });
@@ -205,7 +209,7 @@ describe('handleInbound — HIL resume', () => {
       tenantId: 'tenant1',
       action: 'approve',
       content: undefined,
-      approvedBy: 'U1',
+      actorId: 'U1',
     });
     // A resume must never create a second run.
     expect(mockRunService.create).not.toHaveBeenCalled();
@@ -282,7 +286,7 @@ describe('handleInbound — HIL resume', () => {
       tenantId: 'tenant1',
       action: 'clarification_response',
       content: 'the blue one',
-      approvedBy: 'U1',
+      actorId: 'U1',
     });
   });
 
@@ -334,6 +338,49 @@ describe('handleInbound — HIL resume — approver allowlist', () => {
     expect(enqueue).not.toHaveBeenCalled();
   });
 
+
+  it('reports a private denial and audits the rejected actor without enqueuing', async () => {
+    mockConnectorConfigService.getRaw.mockResolvedValue({ approverIds: ['other-user'] });
+    const res = await handleInbound('slack', req(), deps);
+    expect(await res.text()).toBe('denied');
+    expect(adapter.sendDenial).toHaveBeenCalledTimes(1);
+    expect(enqueue).not.toHaveBeenCalled();
+    expect(mockAuditLog).toHaveBeenCalledWith(expect.objectContaining({
+      eventType: 'claw.gateway.approval_denied',
+      user: 'U1',
+      status: 'warning',
+      tenantId: 'tenant1',
+      metadata: expect.objectContaining({ action: 'approve', reason: 'not_allowlisted' }),
+    }));
+  });
+
+  it('denies when an allowlist is configured but the platform actor ID is missing', async () => {
+    mockConnectorConfigService.getRaw.mockResolvedValue({ approverIds: ['U1'] });
+    adapter.parseInbound.mockResolvedValue({ ...replyMessage, userId: '' });
+    const res = await handleInbound('slack', req(), deps);
+    expect(res.status).toBe(200);
+    expect(enqueue).not.toHaveBeenCalled();
+    expect(adapter.sendDenial).toHaveBeenCalledTimes(1);
+    expect(mockAuditLog).toHaveBeenCalledWith(expect.objectContaining({
+      user: 'unknown',
+      metadata: expect.objectContaining({ reason: 'not_allowlisted' }),
+    }));
+  });
+
+  it('audits and privately denies approve_always without an allowlist', async () => {
+    adapter.parseInbound.mockResolvedValue({
+      ...replyMessage,
+      replyContext: { ...replyMessage.replyContext, action: 'approve_always' as const },
+    });
+    const res = await handleInbound('slack', req(), deps);
+    expect(res.status).toBe(200);
+    expect(enqueue).not.toHaveBeenCalled();
+    expect(adapter.sendDenial).toHaveBeenCalledTimes(1);
+    expect(mockAuditLog).toHaveBeenCalledWith(expect.objectContaining({
+      metadata: expect.objectContaining({ reason: 'allowlist_required' }),
+    }));
+  });
+
   it('queues an approve from a user who is on the configured allowlist', async () => {
     mockConnectorConfigService.getRaw.mockResolvedValue({ approverIds: ['U1', 'U2'] });
 
@@ -341,7 +388,7 @@ describe('handleInbound — HIL resume — approver allowlist', () => {
 
     expect(res.status).toBe(200);
     expect(enqueue).toHaveBeenCalledWith(
-      expect.objectContaining({ runId: 'run_existing', action: 'approve', approvedBy: 'U1' }),
+      expect.objectContaining({ runId: 'run_existing', action: 'approve', actorId: 'U1' }),
     );
   });
 
@@ -352,7 +399,7 @@ describe('handleInbound — HIL resume — approver allowlist', () => {
 
     expect(res.status).toBe(200);
     expect(enqueue).toHaveBeenCalledWith(
-      expect.objectContaining({ runId: 'run_existing', action: 'approve', approvedBy: 'U1' }),
+      expect.objectContaining({ runId: 'run_existing', action: 'approve', actorId: 'U1' }),
     );
   });
 
@@ -380,7 +427,7 @@ describe('handleInbound — HIL resume — approver allowlist', () => {
 
     expect(res.status).toBe(200);
     expect(enqueue).toHaveBeenCalledWith(
-      expect.objectContaining({ action: 'approve_always', approvedBy: 'U1' }),
+      expect.objectContaining({ action: 'approve_always', actorId: 'U1' }),
     );
   });
 

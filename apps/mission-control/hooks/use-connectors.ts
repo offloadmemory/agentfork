@@ -66,7 +66,7 @@ async function fetchConnector(channel: ChannelId): Promise<ConnectorDetail> {
 
 async function saveConnector(
   channel: ChannelId,
-  input: Record<string, string | boolean | undefined>,
+  input: Record<string, string | boolean | string[] | undefined>,
 ): Promise<ConnectorSaveResult> {
   const res = await fetch(`${BASE_PATH}/api/connectors/${channel}`, {
     method: 'PUT',
@@ -116,7 +116,7 @@ export function useConnector(channel: ChannelId) {
 export function useSaveConnector(channel: ChannelId) {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (input: Record<string, string | boolean | undefined>) => saveConnector(channel, input),
+    mutationFn: (input: Record<string, string | boolean | string[] | undefined>) => saveConnector(channel, input),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: connectorKeys.detail(channel) });
       queryClient.invalidateQueries({ queryKey: connectorKeys.lists() });

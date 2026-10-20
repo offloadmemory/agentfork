@@ -66,7 +66,11 @@ export function ConnectorSettingsForm({ channel }: { channel: ChannelId }) {
   const handleSave = async () => {
     setError(null);
     try {
-      const result = await save.mutateAsync({ ...values, enabled: effectiveEnabled });
+      // The API stores an actual string[]; empty input explicitly clears the list.
+      const approverIds = values.approverIds === undefined
+        ? {}
+        : { approverIds: Array.from(new Set(values.approverIds.split(/[,;\n]+/).map((id) => id.trim()).filter(Boolean))) };
+      const result = await save.mutateAsync({ ...values, ...approverIds, enabled: effectiveEnabled });
       // Clear the inputs so the form goes back to showing masks — leaving the
       // typed plaintext on screen after a successful save is needless exposure.
       setValues({});

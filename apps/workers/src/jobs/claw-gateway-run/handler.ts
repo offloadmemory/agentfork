@@ -18,7 +18,8 @@ import { clawGatewayRunSchema } from './schema.js';
 const log = createLogger('claw-gateway-run');
 
 export async function handleClawGatewayRun(data: unknown): Promise<void> {
-  const { runId, tenantId, action, content, approvedBy } = clawGatewayRunSchema.parse(data);
+  const { runId, tenantId, action, content, actorId: newActorId, approvedBy } = clawGatewayRunSchema.parse(data);
+  const actorId = newActorId ?? approvedBy; // compatibility for pre-existing queued jobs
 
   try {
     const { executeRun, terminateRun, grantPendingToolsForRun } = await import('@chatbot/claw-studio');
@@ -39,7 +40,7 @@ export async function handleClawGatewayRun(data: unknown): Promise<void> {
         runId,
         deps,
         kind: action === 'reject' ? 'reject' : 'cancel',
-        approvedBy: action === 'reject' ? approvedBy : undefined,
+        actorId: action === 'reject' ? actorId : undefined,
       });
       return;
     }
@@ -48,7 +49,7 @@ export async function handleClawGatewayRun(data: unknown): Promise<void> {
     await executeRun({
       runId,
       deps,
-      resume: action ? { action, content, approvedBy } : undefined,
+      resume: action ? { action, content, actorId } : undefined,
     });
     log.info({ runId, tenantId }, 'Gateway run handler finished');
   } catch (error) {

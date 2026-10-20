@@ -223,6 +223,8 @@ export interface ChannelAdapter extends ChannelConnector {
   parseInbound(req: Request): Promise<GatewayMessage>;
   /** Must be fast — Slack and Discord both time out around 3s. */
   sendAck(req: Request, runId: string): Promise<Response>;
+  /** Private, generic feedback on a denied approval. Never reveals run details. */
+  sendDenial?(req: Request, runId: string): Promise<Response>;
 
   sendResult(run: ClawRunRecord, events: ClawRunEventRecord[]): Promise<void>;
   sendError(run: ClawRunRecord, error: string): Promise<void>;

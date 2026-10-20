@@ -397,6 +397,20 @@ export class SlackConnector implements ChannelAdapter {
     );
   }
 
+  /** Ephemeral response to the clicking user; never modifies the shared approval message. */
+  async sendDenial(req: Request, runId: string): Promise<Response> {
+    const parsed = await this.parse(req).catch(() => null);
+    if (parsed?.kind !== 'block_actions') return this.sendAck(req, runId);
+    return new Response(
+      JSON.stringify({
+        response_type: 'ephemeral',
+        replace_original: false,
+        text: 'You are not authorized to approve this request.',
+      }),
+      { status: 200, headers: { 'Content-Type': 'application/json' } },
+    );
+  }
+
   // ==========================================================================
   // Outbound
   // ==========================================================================

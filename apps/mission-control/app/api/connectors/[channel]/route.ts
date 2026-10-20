@@ -85,6 +85,7 @@ const saveSchemas: Record<string, z.ZodType> = {
   slack: z
     .object({
       enabled: z.boolean().optional(),
+      approverIds: z.array(z.string().trim().min(1).max(128)).max(50).optional(),
       signingSecret: z.string().optional(),
       botToken: z.string().optional(),
       teamId: z.string().optional(),
@@ -93,6 +94,7 @@ const saveSchemas: Record<string, z.ZodType> = {
   telegram: z
     .object({
       enabled: z.boolean().optional(),
+      approverIds: z.array(z.string().trim().min(1).max(128)).max(50).optional(),
       botToken: z.string().optional(),
       secretToken: z.string().optional(),
     })
@@ -100,6 +102,7 @@ const saveSchemas: Record<string, z.ZodType> = {
   discord: z
     .object({
       enabled: z.boolean().optional(),
+      approverIds: z.array(z.string().trim().min(1).max(128)).max(50).optional(),
       applicationId: z.string().optional(),
       publicKey: z.string().optional(),
       botToken: z.string().optional(),
@@ -171,7 +174,7 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
     }
 
     const configs = new ClawConnectorConfigService(ctx.tenantId);
-    await configs.save(ctx.channel, parsed.data as Record<string, string | boolean | undefined>, ctx.actor);
+    await configs.save(ctx.channel, parsed.data as Record<string, string | boolean | string[] | undefined>, ctx.actor);
 
     // Routing is established after the save so the link always reflects what is
     // actually stored. A failure here is reported, never fatal — the credentials

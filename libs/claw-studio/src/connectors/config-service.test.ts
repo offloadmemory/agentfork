@@ -71,6 +71,23 @@ describe('ClawConnectorConfigService', () => {
     });
   });
 
+  it('round-trips, lists and clears approver IDs without encrypting public IDs', async () => {
+    const svc = new ClawConnectorConfigService('tenant-1');
+    await svc.save('telegram', { approverIds: ['42', '43', '42'] });
+    expect(await svc.getRaw('telegram')).toMatchObject({ approverIds: ['42', '43'] });
+    expect((await svc.getMasked('telegram')).fields.approverIds).toBe('42, 43');
+    await svc.save('telegram', { enabled: false });
+    expect(await svc.getRaw('telegram')).toMatchObject({ approverIds: ['42', '43'] });
+    await svc.save('telegram', { approverIds: [] });
+    expect(await svc.getRaw('telegram')).toMatchObject({ approverIds: [] });
+  });
+
+  it('rejects malformed approver IDs before saving', async () => {
+    const svc = new ClawConnectorConfigService('tenant-1');
+    await expect(svc.save('telegram', { approverIds: [''] })).rejects.toThrow('Invalid approverIds');
+    await expect(svc.save('telegram', { approverIds: Array(51).fill('1') })).rejects.toThrow('Invalid approverIds');
+  });
+
   it('returns null from getRaw when the channel was never configured', async () => {
     expect(await new ClawConnectorConfigService('tenant-1').getRaw('telegram')).toBeNull();
   });

@@ -78,33 +78,30 @@ Fixed by `tokenizeName()` (maps `_`/`-` to spaces before matching) plus the two 
 
 ---
 
-## 🔴 11. Channel approval buttons are not authorized to a user
+## 🟡 11. PARTIALLY FIXED (2026-10-19) — Channel approval identity
 
-**Where:** `libs/claw-studio/src/gateway/gateway-service.ts` — the resume handler; and each
-adapter's `parseInbound` for interactive payloads.
+**Current behavior:** PR #65 added approverIds to each connector and checks the
+platform actor before queuing approval actions. approve_always refuses requests
+without a configured allowlist. Ordinary approve/reject without a list remain
+backward-compatible under the maintainer's explicitly approved compromise.
 
-**Problem:** the resume path validates the channel signature, that the run exists, that it belongs to
-the tenant the signature resolved to, and that the run's status matches the action. It captures the
-clicker's platform user id (`message.userId`) and **never checks it against anything**. Any member of
-the connected Slack workspace who can see an approval message can press Approve, Reject, or
-"Always allow for this task".
+**Follow-up from [PR #65 review](https://github.com/offloadmemory/agentfork/pull/65#pullrequestreview-5567988309):**
+- Provide private, generic feedback for denied button presses.
+- Audit denied actions with tenant, channel, actor ID, action, and reason.
+- Rename the new-job identity field to actorId with compatibility for already-queued
+  payloads, and keep timeline content unchanged.
+- Store the actor in structured approval_decision.metadata.
+- Expose approverIds in the Mission Control connector configuration editor and
+  validate its values before saving.
+- Test missing platform identities when an allowlist is configured.
 
-**Verified:** traced the full resume path — no allowlist, no role check, no comparison of
-`message.userId` against any stored value. `SlackConnectorConfig` has no allowlist field.
-`ClawConnectorConfigService` stores none.
+**Compatibility:** One-time approve/reject without an allowlist is still allowed
+until the maintainer explicitly decides to change that policy. Enabling
+approve_always requires an explicit nonempty approver allowlist.
 
-**Blast radius:** pre-existing for Approve/Reject, which grant a **one-time** action. `approve_always`
-(added 2026-07-31) grants a **standing permission** on the task, so a single click by any workspace
-member can let a scheduled task send mail or create issues unattended indefinitely. The feature did
-not create this gap but it materially raises its consequence.
-
-**Fix, roughly in order of value:**
-1. Add an approver allowlist to each channel's connector config (platform user ids), checked in the
-   resume handler before enqueueing. A `whatsapp-contact-allowlist` design already exists in this
-   repo to follow.
-2. Until then, consider gating `approve_always` to the Mission Control UI only (where the session is a
-   real authenticated studio login) and dropping the Slack button.
-3. Record the approver on the run's `approval_decision` event so the action is at least attributable.
+**Security scope:** Channel signatures authenticate workspaces, not individual
+operators. Per-operator identities within Mission Control are tracked separately
+in known issue #13.
 
 ---
 

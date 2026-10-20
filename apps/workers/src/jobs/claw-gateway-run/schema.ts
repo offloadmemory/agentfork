@@ -19,6 +19,8 @@ export const clawGatewayRunSchema = z.object({
   /** The user's reply text, for clarification_response. */
   content: z.string().optional(),
   /** The platform user id that made this decision, when it came from a channel. */
+  actorId: z.string().optional(),
+  /** Accept already-queued jobs created before the actorId rename. */
   approvedBy: z.string().optional(),
 });
 
