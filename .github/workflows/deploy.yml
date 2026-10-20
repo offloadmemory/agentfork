@@ -8,18 +8,15 @@ name: Build & push web-ui image
 # region), so a deploy job here would fail for reasons unrelated to the image.
 # Adding it later is a small diff once the infrastructure exists.
 
+# Deploy only a successfully-tested main commit, never untrusted PR code.
 on:
-  push:
+  workflow_run:
+    workflows: ["CI"]
+    types: [completed]
     branches: [main]
-    paths:
-      - "apps/web-ui/**"
-      - "apps/sdk/**"
-      - "libs/**"
-      - "prisma/**"
-      - "package.json"
-      - "bun.lock"
-      - ".github/workflows/deploy.yml"
-  workflow_dispatch:
+
+permissions:
+  contents: read
 
 concurrency:
   group: image-${{ github.ref }}
@@ -29,10 +26,50 @@ env:
   AWS_REGION: ${{ vars.AWS_REGION || 'ap-south-2' }}
   ECR_REPOSITORY: ${{ vars.ECR_REPOSITORY || 'chatbot-web-ui' }}
   AWS_ROLE_ARN: ${{ vars.AWS_ROLE_ARN || 'arn:aws:iam::704554708141:role/agentfork-github-deploy' }}
+  SOURCE_SHA: ${{ github.event.workflow_run.head_sha }}
 
 jobs:
+  changes:
+    name: Detect image-related changes
+    if: >-
+      ${{ github.event.workflow_run.event == 'push' &&
+          github.event.workflow_run.conclusion == 'success' }}
+    runs-on: ubuntu-latest
+    outputs:
+      build: ${{ steps.paths.outputs.build }}
+    steps:
+      - name: Checkout tested commit
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.workflow_run.head_sha }}
+          fetch-depth: 2
+          persist-credentials: false
+      - name: Compare with first parent
+        id: paths
+        shell: bash
+        run: |
+          set -euo pipefail
+          if git rev-parse HEAD^ >/dev/null 2>&1; then
+            git diff --name-only HEAD^ HEAD > /tmp/image-changes.txt
+          else
+            git ls-tree -r --name-only HEAD > /tmp/image-changes.txt
+          fi
+          build=false
+          while IFS= read -r file; do
+            case "$file" in
+              apps/web-ui/*|apps/sdk/*|libs/*|prisma/*|package.json|bun.lock|.github/workflows/deploy.yml)
+                build=true
+                break
+                ;;
+            esac
+          done < /tmp/image-changes.txt
+          echo "build=$build" >> "$GITHUB_OUTPUT"
+          echo "Image-related changes: $build" >> "$GITHUB_STEP_SUMMARY"
+
   build-and-push:
-    name: Build & push image
+    name: Scan & push image
+    needs: [changes]
+    if: needs.changes.outputs.build == 'true'
     # Native arm64 runner. The image targets linux/arm64 (Fargate Graviton), and
     # this repo is public, so arm64 runners are free — building natively avoids
     # QEMU, which is slow enough on a Next.js build to hit the job timeout.
@@ -42,8 +79,11 @@ jobs:
       id-token: write
 
     steps:
-      - name: Checkout
+      - name: Checkout tested commit
         uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.workflow_run.head_sha }}
+          persist-credentials: false
 
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v4
@@ -63,20 +103,21 @@ jobs:
         id: meta
         run: |
           IMAGE="${{ steps.ecr.outputs.registry }}/${ECR_REPOSITORY}"
-          SHORT_SHA="${GITHUB_SHA:0:12}"
+          SHORT_SHA="${SOURCE_SHA:0:12}"
           {
             echo "image=${IMAGE}:${SHORT_SHA}"
             echo "latest=${IMAGE}:latest"
           } >> "$GITHUB_OUTPUT"
           echo "Building ${IMAGE}:${SHORT_SHA}"
 
-      - name: Build and push
+      - name: Build local image for vulnerability scanning
         uses: docker/build-push-action@v6
         with:
           context: .
           file: apps/web-ui/Dockerfile
           platforms: linux/arm64
-          push: true
+          load: true
+          push: false
           # Tagged by commit SHA (immutable, traceable) plus :latest for convenience.
           tags: |
             ${{ steps.meta.outputs.image }}
@@ -92,6 +133,26 @@ jobs:
             # Required, not defaulted: a missing value must fail the build rather than
             # silently bake a localhost URL into a production image's client bundle.
             NEXT_PUBLIC_MISSION_CONTROL_URL=${{ vars.NEXT_PUBLIC_MISSION_CONTROL_URL }}
+
+      - name: Scan local image before publication
+        uses: aquasecurity/trivy-action@v0.36.0
+        with:
+          scan-type: image
+          image-ref: ${{ steps.meta.outputs.image }}
+          scanners: vuln
+          severity: HIGH,CRITICAL
+          ignore-unfixed: true
+          format: table
+          exit-code: "0" # Advisory until baseline findings are triaged.
+
+      - name: Push scanned image
+        env:
+          IMAGE: ${{ steps.meta.outputs.image }}
+          LATEST: ${{ steps.meta.outputs.latest }}
+        run: |
+          set -euo pipefail
+          docker push "$IMAGE"
+          docker push "$LATEST"
 
       - name: Summary
         run: |

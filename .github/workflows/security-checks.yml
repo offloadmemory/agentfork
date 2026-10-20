@@ -1,0 +1,66 @@
+name: Security checks
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+  schedule:
+    - cron: "45 5 * * 1"
+
+permissions:
+  contents: read
+
+jobs:
+  secrets:
+    name: TruffleHog (verified secrets)
+    if: github.event_name != 'schedule'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout full history for secret diff
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Scan changed commits
+        uses: trufflesecurity/trufflehog@v3.92.5
+        with:
+          extra_args: --results=verified
+
+  workflow-audit:
+    name: Zizmor (GitHub Actions security)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Audit GitHub Actions workflows
+        uses: zizmorcore/zizmor-action@v0.6.4
+        continue-on-error: true # Advisory until existing findings are triaged.
+        with:
+          advanced-security: false
+          min-severity: medium
+
+  trivy:
+    name: Trivy (filesystem / IaC baseline)
+    if: github.event_name == 'schedule'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Scan dependencies and configuration
+        uses: aquasecurity/trivy-action@v0.36.0
+        with:
+          scan-type: fs
+          scan-ref: .
+          scanners: vuln,misconfig
+          severity: HIGH,CRITICAL
+          ignore-unfixed: true
+          format: table
+          exit-code: "0" # Initial baseline report; do not hide historical findings.
