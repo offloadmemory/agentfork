@@ -66,7 +66,7 @@ jobs:
         # Required by apps/web-ui's TypeScript sources; otherwise typecheck
         # incorrectly fails on an absent generated @/.source module.
         working-directory: apps/web-ui
-        run: ./node_modules/.bin/fumadocs-mdx
+        run: bunx --package fumadocs-mdx@11.10.1 fumadocs-mdx
 
       - name: Prepare test database
         # migrate deploy, not db push: the HNSW pgvector indexes live in raw SQL
