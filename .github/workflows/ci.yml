@@ -57,7 +57,9 @@ jobs:
       - name: Setup Bun
         uses: oven-sh/setup-bun@v2
         with:
-          bun-version: "1.2.12"
+          # Pin the version from the last successful upstream CI run (PR #70).
+          # The older 1.2.12 fails to resolve workspace packages in Vitest.
+          bun-version: "1.4.3"
 
       - name: Install dependencies
         run: bun install --frozen-lockfile

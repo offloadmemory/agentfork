@@ -13,7 +13,7 @@ itself is free. Private repositories have different GitHub entitlements.
 
 | Workflow | Events | Behavior |
 | --- | --- | --- |
-| CI | PR, push to main | Pinned Bun 1.2.12, real PostgreSQL/pgvector, migrations, index checks, Nx typecheck, unit tests, build |
+| CI | PR, push to main | Pinned Bun 1.4.3 (last verified green upstream runner), real PostgreSQL/pgvector, migrations, index checks, Nx typecheck, unit tests, build |
 | CodeQL SAST | PR, push to main, weekly | JS/TS security-extended queries; uploads findings |
 | OSV PR | PR | Compares new dependency vulnerabilities with baseline |
 | OSV full | Weekly, manual | Full dependency scan, including existing issues |
@@ -28,6 +28,10 @@ builds a local image, scans it with Trivy, and then pushes to ECR using the
 existing OIDC role. Image vulnerability findings are initially advisory
 (exit code 0), not a hard security guarantee. The AWS role must never be
 exposed to untrusted pull-request heads.
+
+- **Bun version metadata:** root package.json still declares Bun 1.2.12,
+  while the last green upstream CI used 1.4.3. Align this declaration
+  in a separate dependency/toolchain migration once validated.
 
 ## Deliberate remaining work
 
